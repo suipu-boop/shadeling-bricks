@@ -1,9 +1,38 @@
 {
   "schema": "brick-registry/v1",
   "bricks": [
-    { "name": "feishu", "version": "1.0.0", "category": "connector", "risk_level": "medium", "path": "bricks/feishu/" },
-    { "name": "browser", "version": "1.0.0", "category": "skill", "risk_level": "high", "path": "bricks/browser/" },
-    { "name": "ax", "version": "1.0.0", "category": "skill", "risk_level": "high", "path": "bricks/ax/" },
-    { "name": "visualize", "version": "1.0.0", "category": "skill", "risk_level": "low", "path": "bricks/visualize/" }
-  ]
+    {
+      "name": "feishu",
+      "version": "1.0.0",
+      "category": "connector",
+      "risk_level": "medium",
+      "summary": "手机飞书 ↔ 本地 Shadeling 的文本桥：WebSocket 长连接、白名单鉴权、默认关闭。",
+      "path": "bricks/feishu/"
+    },
+    {
+      "name": "browser",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "high",
+      "summary": "对接腾讯开源 BrowserSkill（bsk CLI），操作真实已登录浏览器：复用登录态、Agent Window 隔离、Human-in-loop。适合内网/SaaS 后台、填表、抓数据、遇验证码交人。",
+      "path": "bricks/browser/"
+    },
+    {
+      "name": "ax",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "high",
+      "summary": "操作本机 UI（点击按钮、填写表单、聚焦/切换应用），通过 Accessibility API 读写界面元素树，无需截图或视觉模型。",
+      "path": "bricks/ax/"
+    },
+    {
+      "name": "visualize",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "low",
+      "summary": "在对话中生成内联解释图（流程 / 对比 / 架构 / 矩阵），聊天界面自动渲染。",
+      "path": "bricks/visualize/"
+    }
+  ],
+  "updated_at": "2026-08-14"
 }

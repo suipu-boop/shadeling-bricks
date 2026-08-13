@@ -23,11 +23,24 @@ brick-vault/
 
 ## 契约
 
-每个积木必须自带 `brick.json`，5 字段（capabilities / dependencies / resources / risk_level / composition）遵循积木平台 `specs/brick-schema.md`。任何 brick.json 改动须过 `make verify` 闸门。
+每个积木必须自带 `brick.json`，5 字段（capabilities / dependencies / resources / risk_level / composition）。契约权威实现在内核仓库 `runtime/skill_library.py`（`validate_skill_package` / `_normalize_brick_fields`），本仓库 `scripts/new_brick.py` 内置镜像校验；提交前须过内核 `make verify` 闸门。
+
+## 积木工厂（P3）
+
+一条命令造合规积木：
+
+```bash
+python3 scripts/new_brick.py translator \
+  --summary "中英互译，走本地模型" \
+  --category skill --risk low \
+  --capabilities "text.translate,text.zh2en,text.en2zh"
+```
+
+生成 `bricks/<name>/brick.json` + `README.md`，登记进 `index.json`，并自检 5 字段契约。
 
 ## 恢复约定
 
-继续积木平台的工作前，先读积木平台 `docs/ROADMAP.md` 对齐当前阶段（当前：P0 已完成，P1 提取试点）。
+积木平台当前阶段：P0（契约）✅ → P1（首批 4 积木）✅ → P2（内核瘦身契约）✅ → P3（积木工厂）✅。
 
 ## 将来发布
 
