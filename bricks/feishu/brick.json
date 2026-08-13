@@ -1,0 +1,52 @@
+{
+  "name": "feishu",
+  "summary": "手机飞书 ↔ 本地 Shadeling 的文本桥：WebSocket 长连接、白名单鉴权、默认关闭。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "飞书连接器（FeishuConnector）。通过飞书开放平台 WebSocket 长连接（bot 出站建连，免公网 IP）接收手机飞书消息，经本地 IPC（127.0.0.1，与 Swift UI 同契约）调用 agent 聊天，再把回复回发飞书。复用 ~/.shadeling 记忆/会话库；白名单鉴权，仅响应 allowed_user_ids；凭据存 ~/.shadeling/config/feishu.json，不进 git、不进记忆库；默认关闭。依赖 lark-oapi（官方 SDK）。另含轻量主动推送器 FeishuNotifier（任务完成通知，仅 REST 发送）。",
+  "category": "connector",
+  "tags": [
+    "feishu",
+    "connector",
+    "im",
+    "websocket",
+    "bridge"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "capabilities": [
+    "connector.feishu",
+    "im.receive",
+    "im.send",
+    "push.notify",
+    "chat.bridge"
+  ],
+  "dependencies": [
+    {
+      "name": "lark-oapi",
+      "type": "python",
+      "version": "*"
+    }
+  ],
+  "resources": {
+    "memory_mb": 128,
+    "disk_mb": 5,
+    "network": true,
+    "ports": [
+
+    ]
+  },
+  "risk_level": "medium",
+  "composition": {
+    "requires": [
+
+    ],
+    "conflicts_with": [
+
+    ],
+    "memory_scope": [
+      "session",
+      "project"
+    ]
+  }
+}

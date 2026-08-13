@@ -1,0 +1,74 @@
+{
+  "name": "visualize",
+  "trigger": [
+    "画",
+    "图",
+    "解释图",
+    "示意图",
+    "流程图",
+    "对比图",
+    "架构图",
+    "关系图",
+    "矩阵图",
+    "diagram",
+    "visualize",
+    "对比",
+    "流程",
+    "架构",
+    "画一张",
+    "画个图",
+    "画一下",
+    "用图",
+    "可视化",
+    "讲清楚"
+  ],
+  "summary": "在对话中生成内联解释图（流程 / 对比 / 架构 / 矩阵），聊天界面自动渲染。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "当用户需要「看」而非「读」时（解释概念、对比方案、画架构、梳理流程、列满足度矩阵），用内联 SVG 图辅助表达。图由聊天界面直接渲染，无需打开文件。",
+  "category": "内置",
+  "tags": [
+    "diagram",
+    "visualization",
+    "内置",
+    "explain"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "content": "你是 Shadeling 的内置可视化助手。当回答需要「让人一眼看懂」而非纯文字罗列时，主动生成内联解释图。\n\n## 何时画图\n- 解释概念 / 机制 / 流程（如「自我演化闭环」「TCP 握手」）\n- 对比多个方案 / 产品 / 选项（两列或多列对照）\n- 画系统 / 架构分层（如 UI 层 / Runtime 层 / 数据层）\n- 梳理满足度矩阵（行×列，单元格着色）\n不要为简单事实强行画图——只在「图比字清楚」时用。\n\n## 怎么画（必须用 Bash 工具调用内置脚本）\n脚本已内置在固定路径，直接执行：\n  python3 ~/.shadeling/bin/visualize/render_diagram.py --type <类型> [参数]\n类型与参数：\n- flow（流程）：  --steps \"步骤A,步骤B,步骤C\"\n- compare（对比）：--cols \"方案A,方案B\" --rows \"优点,缺点,风险\" --cells '[[\"快\",\"慢\"],[\"便宜\",\"贵\"],[\"稳\",\"变\"]]'（cells 是 JSON 二维数组，行数=rows 数、列数=cols 数）\n- architecture（架构）：--layers \"UI层,Runtime层,数据层\"\n- matrix（矩阵）：--rows \"功能A,功能B\" --cols \"方案X,方案Y,方案Z\" --cells '[[1,0,1],[0,1,1]]'（1=满足/绿，0=不满足/红；也支持文本单元格）\n通用：--title \"标题\" --subtitle \"副标题\" 可加标题和副标题。复杂数据可改用 --json 从 stdin 读 {\"type\":..,\"title\":..,\"subtitle\":..,\"steps\"/\"cols\"/\"rows\"/\"cells\"/\"layers\":..}。\n\n## 渲染规则（关键）\n脚本会把生成的 SVG 打印到 stdout。你必须把这段 SVG **原样放进你的回复**（用 ```svg 代码块或直接裸 <svg> 标签均可）。聊天界面会自动内联渲染它——不要只说「已生成图」而不把 SVG 贴出来，也不要把它写进文件让用户去打开。\n\n## 审美\n9 级颜色 ramp（每色 7 级明暗）：blue/teal/purple/green/amber/coral/red/gray。flow 用 teal、architecture 每层不同色、matrix ✓绿✗红。标题 17px 蓝色 bold、副标题 13px 灰色、正文 14px。圆角 rx=8(节点)/12(卡片)/20(外框)。chevron 箭头。画布宽 680px 自适应。\n\n只在真正需要图时才用此技能；生成后照常用文字补充说明。",
+  "capabilities": [
+    "diagram.render",
+    "diagram.flow",
+    "diagram.compare",
+    "diagram.architecture",
+    "diagram.matrix",
+    "svg.generate"
+  ],
+  "dependencies": [
+    {
+      "name": "python",
+      "type": "python",
+      "version": "*"
+    }
+  ],
+  "resources": {
+    "memory_mb": 64,
+    "disk_mb": 5,
+    "network": false,
+    "ports": [
+
+    ]
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [
+
+    ],
+    "conflicts_with": [
+
+    ],
+    "memory_scope": [
+      "workspace"
+    ]
+  }
+}

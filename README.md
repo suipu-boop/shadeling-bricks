@@ -6,7 +6,7 @@
 
 - 内核仓库只留 `supervisor / loop / engine_router / ipc` + 积木宿主，不持有具体积木。
 - 本仓库承载所有「四肢」积木：连接器、技能、安全、文档、工具等。
-- 内核与本仓库之间唯一接口是 brick 契约（`brick.yaml`），契约定义见积木平台 `specs/brick-schema.md`。
+- 内核与本仓库之间唯一接口是 brick 契约（`brick.json`），契约定义见积木平台 `specs/brick-schema.md`。
 
 ## 结构
 
@@ -14,7 +14,7 @@
 brick-vault/
 ├── bricks/          # 每个积木一个子目录
 │   ├── feishu/      # 连接器积木（P1）
-│   │   ├── brick.yaml
+│   │   ├── brick.json
 │   │   └── ...
 │   └── ...
 ├── index.json       # 积木清单（工厂/画布读这个）
@@ -23,7 +23,7 @@ brick-vault/
 
 ## 契约
 
-每个积木必须自带 `brick.yaml`，5 字段（capabilities / dependencies / resources / risk_level / composition）遵循积木平台 `specs/brick-schema.md`。任何 brick.yaml 改动须过 `make verify` 闸门。
+每个积木必须自带 `brick.json`，5 字段（capabilities / dependencies / resources / risk_level / composition）遵循积木平台 `specs/brick-schema.md`。任何 brick.json 改动须过 `make verify` 闸门。
 
 ## 恢复约定
 

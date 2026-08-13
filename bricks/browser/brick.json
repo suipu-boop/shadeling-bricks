@@ -1,0 +1,77 @@
+{
+  "name": "browser",
+  "trigger": [
+    "打开网页",
+    "浏览网页",
+    "操作网站",
+    "操作网页",
+    "登录网站",
+    "查内网",
+    "填表",
+    "填网页表单",
+    "抓网页",
+    "抓取网页内容",
+    "网页截图",
+    "点网页按钮",
+    "浏览器",
+    "上网",
+    "browser",
+    "bsk",
+    "网页自动化",
+    "Agent Window",
+    "操作浏览器",
+    "网页操作",
+    "浏览器skill"
+  ],
+  "summary": "对接腾讯开源 BrowserSkill（bsk CLI），操作真实已登录浏览器：复用登录态、Agent Window 隔离、Human-in-loop。适合内网/SaaS 后台、填表、抓数据、遇验证码交人。",
+  "version": "1.0.0",
+  "author": "Shadeling（对接 Tencent/BrowserSkill, MIT）",
+  "description": "当用户需要 Shadeling 真正「动手」操作网页时使用，尤其涉及已登录网站：打开/导航网页、点按钮、填表单、抓页面结构化数据、截图、遇验证码/登录确认暂停交人。底层对接腾讯开源 BrowserSkill（bsk CLI + 浏览器扩展），复用真实登录态、隔离 Agent Window、内置 Human-in-loop。bsk 为外部工具，需本机安装（见技能内容引导），不随 Shadeling 安装包分发。",
+  "category": "内置",
+  "tags": [
+    "browser",
+    "browserskill",
+    "bsk",
+    "web-automation",
+    "内置",
+    "tencent"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "content": "你是 Shadeling 操作真实浏览器的助手，底层对接腾讯开源的 BrowserSkill（bsk CLI）。当用户要让 Shadeling「动手」操作网页——尤其是已登录的网站（内网系统、SaaS 后台、需登录的页面）、打开/导航网页、点按钮、填表单、抓页面内容或结构化数据、截图网页，或遇到验证码/登录需人确认时——用 Bash 工具调用 bsk。\n\n## 核心特性（务必先理解）\n- BrowserSkill 复用你**真实已登录浏览器**的登录态，无需重新登录、无需 2FA/验证码（除非站点本身要）。\n- 操作在独立的 **Agent Window**（橙色高亮窗口）进行，不干扰你正常浏览，你的其它窗口默认只读受保护。\n- 遇验证码 / OTP / 登录确认 / 支付确认等只有人能做的步骤，用 request-help **暂停交给你**，你处理完它继续（Human-in-loop）。\n- 你（Shadeling）从不直接碰浏览器：全部经 bsk CLI → 本机 daemon → 浏览器扩展 → Agent Window。\n\n## 前置（首次使用必查，bsk 是外部工具，不随 Shadeling 安装包分发）\n1. bsk CLI 在 PATH。检测：`command -v bsk || ls \"$HOME/.local/bin/bsk\"`。\n   未装则引导用户执行官方一行安装（macOS / Linux）：\n   `curl -fsSL https://raw.githubusercontent.com/Tencent/BrowserSkill/main/install.sh | sh`\n   装完用 `bsk --version` 验证。\n2. 浏览器扩展已装且连接：从 Chrome / Edge 网上应用店装「BrowserSkill」扩展，打开后状态应显示已连接（绿色）。\n   （本机是 Microsoft Edge / Chromium，支持；Chrome 店扩展在 Edge 需开启「允许来自其他商店的扩展」。Firefox 官方尚未支持。）\n3. PATH 兜底：若 `bsk` 不在 PATH，每次调之前先 `export PATH=\"$HOME/.local/bin:$PATH\"`。\n首次用前用 `bsk status` 确认连接健康；异常用 `bsk doctor` 诊断。扩展未连接时不要假装完成，提示用户去装/连接。\n\n## 强制工作流（每个浏览器任务都遵循）\n1. `bsk session start` → 捕获它打印的 **4 字母 session id**（如 a1b2）\n2. 后续所有操作命令都带 `--session <id>`\n3. 任务完成（含出错路径）必 `bsk session stop <id>`（或 `bsk session stop --all`）关窗口、自动归还借用标签\n绝不跳过 session stop（否则 Agent Window 不关、借用标签不归还）。\n\n## 常用命令（Bash 调用，均带 --session <id>）\n- 导航：`bsk navigate <url> [--wait-until load --timeout 30s]`、`bsk navigate-back`、`bsk navigate-forward`、`bsk reload [--hard]`\n- 观察页面：`bsk snapshot`（结构化元素树，含 @eN ref，优先用它定位）、`bsk observe`、`bsk get-html`、`bsk screenshot [--ref @eN --out /tmp/x.png]`（省略 --ref 截全屏）\n- 交互：`bsk click <ref或CSS> [--button left --click-count 1]`、`bsk hover <ref>`、`bsk fill <ref> --value \"文字\"`（填输入框）、`bsk select <ref> --value 选项`、`bsk press Enter`（或 `Ctrl+A`）\n- 标签页：`bsk tab list --scope user|agent|all`、`bsk tab create --url <url>`、`bsk tab close <id>`、`bsk tab select <id>`\n- 脚本：`bsk evaluate \"<JS>\"`（在页面上下文执行 JS，抛错走 stderr）、`bsk wait-ms 500ms`、`bsk wait-for-navigation`\n- 借用用户已开标签（默认只读，要改动需借用）：`bsk tab borrow <id>` … 用完 `bsk tab return <id>`（不长期占用）\n- 人工帮助（遇验证码/登录/支付确认或两次失败无进展）：`bsk request-help --session <id> --prompt \"请完成验证码然后点完成\" [--title \"需要验证码\" --target @e7 --target \"#submit\" --timeout 5m]`\n- 诊断：`bsk status`、`bsk doctor`、`bsk browsers`\n全局 flag：`--json`（机器可读）、`--quiet`、`-v/-vv`。不确定元素时先 `snapshot` 看 @eN ref 再 click/fill，别盲猜选择器。用 `--json` 拿结构化结果更稳。\n\n## 红线（绝不违反）\n- 不跳过 `session stop`。\n- 不长期借用用户个人标签（No long borrow）；跨不相关任务必须归还。\n- 不在敏感站（银行 / 支付 / 代币）用 `evaluate` 做越权操作。\n- 遇验证码 / 登录确认**不要暴力重试**，立即 `request-help` 交给人。\n- 成功后不继续操控无关页面。\n\n## 边界\n- 只操作用户明确指定的网页与任务；不擅自遍历 / 篡改无关页面。\n- 操作结果（snapshot 文本、截图路径、request-help 状态）照实汇报给用户。\n- 扩展未连接（`bsk status` 异常）时，提示用户去装 / 连接扩展，不要假装完成。\n\n## 与 shadeling 其它技能的关系\n- 这是「真实浏览器（含登录态）」通道；纯本地桌面 UI 操作用 ax 技能；画内联解释图用 visualize 技能。三者按用户意图互补，不混用。\n",
+  "capabilities": [
+    "web.navigate",
+    "web.click",
+    "web.fill",
+    "web.extract",
+    "web.screenshot",
+    "web.evaluate"
+  ],
+  "dependencies": [
+    {
+      "name": "bsk",
+      "type": "binary",
+      "version": "*"
+    }
+  ],
+  "resources": {
+    "memory_mb": 128,
+    "disk_mb": 10,
+    "network": true,
+    "ports": [
+
+    ]
+  },
+  "risk_level": "high",
+  "composition": {
+    "requires": [
+
+    ],
+    "conflicts_with": [
+
+    ],
+    "memory_scope": [
+      "session"
+    ]
+  }
+}

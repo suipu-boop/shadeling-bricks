@@ -1,4 +1,9 @@
 {
   "schema": "brick-registry/v1",
-  "bricks": []
+  "bricks": [
+    { "name": "feishu", "version": "1.0.0", "category": "connector", "risk_level": "medium", "path": "bricks/feishu/" },
+    { "name": "browser", "version": "1.0.0", "category": "skill", "risk_level": "high", "path": "bricks/browser/" },
+    { "name": "ax", "version": "1.0.0", "category": "skill", "risk_level": "high", "path": "bricks/ax/" },
+    { "name": "visualize", "version": "1.0.0", "category": "skill", "risk_level": "low", "path": "bricks/visualize/" }
+  ]
 }
