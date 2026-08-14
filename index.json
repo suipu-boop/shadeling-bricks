@@ -166,7 +166,7 @@
       "version": "1.0.0",
       "category": "memory",
       "risk_level": "low",
-      "summary": "本地小模型增强：内容总结（summarize）+ 语义召回（semantic_recall）。",
+      "summary": "记忆增强：自动总结长内容 + 按意思找回记忆，装上即用，模型可选。",
       "path": "bricks/memory-smol/"
     },
     {

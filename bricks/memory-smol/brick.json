@@ -3,7 +3,7 @@
   "summary": "本地小模型增强：内容总结（summarize）+ 语义召回（semantic_recall）。",
   "version": "1.0.0",
   "author": "Shadeling",
-  "description": "MemoryBrick（memory_kind=smol）。注册本地小模型增强能力：summarize 用本地 GGUF 小模型（Qwen2.5-1.5B-Instruct / Llama-3.2-1B）做内容总结，semantic_recall 用 bge-small-zh-v1.5 做语义召回。经 extract_via 双轨接入，无引擎时安全降级（KeywordExtractor / 关键词打分），不影响核心闭环。依赖 memory-core。",
+  "description": "「记忆增强」积木：让 AI 的记忆更聪明，提供两个能力——\n\n1. 内容总结（summarize）：把长对话/长内容自动压缩成摘要，方便以后回忆。\n2. 语义召回（semantic_recall）：按「意思」而不是「关键词」找回记忆，比如问「上次聊的积木平台」能找回相关记录。\n\n需要和 memory-core 一起装。没装本地模型时自动降级为关键词匹配，功能不中断。\n\n【配置要求】\n- 完整版（两个能力都要）：建议 16GB 内存以上。本地跑一个小型 AI 模型做总结，效果和资源最平衡。\n- 轻量版（只用语义召回）：8GB 内存即可。语义召回用的嵌入模型只有 15MB，几乎不占资源。\n- 低于 8GB：不建议安装，本地模型效果和资源不划算。\n\n【怎么选模型】往 models 目录放哪个模型就用哪个（自动识别）：\n- 0.5B：约 0.7GB 内存，效果一般（适合低配）\n- 1.5B：约 1.3GB 内存，效果及格\n- 3B：约 2.3GB 内存，效果最好（16GB 机器推荐）\n- 7B：约 5GB 内存，接近商用（32GB+ 机器）",
   "category": "memory",
   "memory_kind": "smol",
   "tags": [
@@ -25,7 +25,7 @@
     {"name": "memory-core", "type": "skill", "version": "*"}
   ],
   "resources": {
-    "memory_mb": 4096,
+    "memory_mb": 3072,
     "disk_mb": 0,
     "network": false,
     "ports": []
