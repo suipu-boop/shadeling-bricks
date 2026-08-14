@@ -40,6 +40,30 @@
       "risk_level": "low",
       "summary": "生成 docx / xlsx / pptx 文档（纯 stdlib 拼装，零 LLM token），经 provides_tool 委托内核 DocWrite handler。",
       "path": "bricks/docwrite/"
+    },
+    {
+      "name": "code-quality-chain",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "low",
+      "summary": "五阶段代码修改质量闭环：出地图→交叉审→治源头→隔离验证→固化闸门→出包，根治\"修了还复发\"",
+      "path": "bricks/code-quality-chain/"
+    },
+    {
+      "name": "high-config-doc",
+      "version": "1.0.0",
+      "category": "binary",
+      "risk_level": "medium",
+      "summary": "用 DocWritePro 工具生成带复杂排版的 docx/xlsx/pptx（基于 editor_sdk 原生引擎），支持 commands 命令驱动模式（染色表格/图表/页眉页码/形状/主题配色）。",
+      "path": "bricks/high-config-doc/"
+    },
+    {
+      "name": "meeting-minutes",
+      "version": "1.1.0",
+      "category": "内置",
+      "risk_level": "low",
+      "summary": "把对话/录音整理成待办+决议的会议纪要",
+      "path": "bricks/meeting-minutes/"
     }
   ],
   "updated_at": "2026-08-14"

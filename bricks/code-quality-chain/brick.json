@@ -1,0 +1,60 @@
+{
+  "name": "code-quality-chain",
+  "trigger": [
+    "审查代码逻辑",
+    "代码质量",
+    "改代码",
+    "修bug",
+    "修了还复发",
+    "交叉审查",
+    "代码审查",
+    "code review",
+    "质量链"
+  ],
+  "summary": "五阶段代码修改质量闭环：出地图→交叉审→治源头→隔离验证→固化闸门→出包，根治\"修了还复发\"",
+  "version": "1.0.0",
+  "author": "随朴",
+  "description": "把一次代码修改从\"我觉得修好了\"变成\"有独立证据证明修好了\"。核心解决\"自己审自己看不见盲点\"导致\"修4次还复发\"的痛点。五阶段：(0)zoom-out 出代码地图(1)第二模型交叉审逻辑(2)治源头修复(3)隔离验证绝不碰真实数据(4)固化闸门防回退(5)出包+声称有据。内置隔离逻辑测试骨架脚本。",
+  "category": "内置",
+  "tags": [
+    "代码质量链",
+    "code",
+    "review",
+    "质量",
+    "bug",
+    "交叉审查",
+    "代码审查",
+    "逻辑审查",
+    "测试"
+  ],
+  "license": "MIT",
+  "source": "github.com/suipu-boop/shadeling-skills",
+  "content": "你是「代码修改质量链」执行者。任何一次代码修改（尤其跨语言项目 Swift+Python、反复出问题的功能、\"修了还复发\"的隐蔽 bug），按以下五阶段闭环执行，确保\"声称完成\"有独立证据，杜绝自己审自己看不见盲点。\n\n阶段0 先出地图再动手：用 Grep/Read 找出涉及文件、每文件职责、关键函数签名；画\"谁调谁\"依赖方向（被调模块=影响面）；跨语言注意边界契约/序列化/双写镜像。产出简短的模块清单+依赖方向图。\n\n阶段1 第二模型交叉审：把目标文件打包交给第二个模型做逻辑审查（优先排除含密钥/敏感文件，先 dry-run 预览要发什么，确认干净再提交）。按严重度分级输出：🔴数据丢失型（最优先修）/🟠健壮性/✅已确认健壮点。每条给落点+建议修法。典型坑：切状态时未保存编辑被覆盖（镜像双写）、畸形输入不校验可成活跃态、fire-and-forget 保存+中途 refresh 互踩。\n\n阶段2 治源头修复：修的是源头（生成/构建/核心逻辑），不是产物补丁；对🔴数据丢失型优先修。\n\n阶段3 隔离验证（硬性红线，绝不写真实数据）：用纯内存 Fake 类模拟依赖，跑多场景断言。至少4场景：正常输入/混合正常+异常/全异常（此时必须跳过分支不覆盖原值）/空输入。断言不只验证\"过滤生效\"还要验证\"不覆盖原值\"。Swift 侧 swift build -c release --disable-sandbox 必须零错。绝不写用户活 config/真实状态做测试。\n\n阶段4 固化闸门防回退：把\"必须怎样\"写进静态闸门（如 source_guardrails.sh 用 grep 特征变量名检查），更新 BUILD_GUARDRAILS.md 登记不变量；提交前 git status 核对每文件真 staged。\n\n阶段5 出包+声称有据：跑出包流程（repackage.sh <version>）确认闸门全过；声称完成时给证据链（编译零错+隔离测试过+闸门全绿+出包过）；UI 层若无法无头验证，明确告知需人工核验，不默认\"本该就好\"。\n\n隔离逻辑测试骨架（Python，改 run_flow 与场景即可换目标逻辑）：\n#!/usr/bin/env python3\n\"\"\"代码质量链 · 隔离逻辑测试骨架（Python 后端逻辑验证）\n\n用法：把目标逻辑复制进 run_flow()（或 import 真实函数但用 Fake 依赖），\n替换 FakeConfig 与场景用例，即可验证逻辑而不碰任何真实数据。\n\n铁律：绝不写真实用户数据（如 ~/.shadeling/config.json）。本骨架全部纯内存。\n\"\"\"\nimport sys\n\n\nclass FakeConfig:\n    \"\"\"模拟被测逻辑所依赖的配置对象。按需加字段。\"\"\"\n    def __init__(self):\n        self.profiles = [{\"id\": \"p1\", \"name\": \"A\"}]\n        self.active_profile_id = \"p1\"\n\n\ndef run_flow(params, cfg):\n    \"\"\"把要被验证的多预设分支逻辑复制进来（或调用真实函数）。\n\n    这里示例：过滤畸形预设 + active fallback + 投影。\n    替换成你的目标逻辑即可。\n    \"\"\"\n    if \"profiles\" in params and isinstance(params[\"profiles\"], list) and params[\"profiles\"]:\n        clean = [p for p in params[\"profiles\"] if isinstance(p, dict) and p.get(\"id\")]\n        if clean:\n            params = dict(params)\n            params[\"profiles\"] = clean\n            active_id = params.get(\"active_profile_id\") or cfg.active_profile_id\n            ids = [p[\"id\"] for p in clean]\n            if active_id not in ids:\n                active_id = ids[0] if ids else \"default\"\n            cfg.profiles = clean\n            cfg.active_profile_id = active_id\n            ap = next((p for p in clean if p.get(\"id\") == active_id), None)\n            if ap and isinstance(ap, dict):\n                params[\"backend\"] = ap.get(\"backend\", \"api\")\n                for k in (\"api_url\", \"api_key\", \"api_model\"):\n                    if k in ap:\n                        params[k] = ap[k]\n    return params, cfg\n\n\ndef main():\n    # 场景1：正常 + 畸形混合 → 畸形剔除、正常保留、active 正确\n    cfg = FakeConfig()\n    params = {\"profiles\": [{\"id\": \"p2\", \"name\": \"B\", \"api_url\": \"u2\"}, {\"name\": \"no-id\"}],\n              \"active_profile_id\": \"p2\"}\n    out, cfg = run_flow(params, cfg)\n    assert cfg.profiles == [{\"id\": \"p2\", \"name\": \"B\", \"api_url\": \"u2\"}], f\"畸形未剔除: {cfg.profiles}\"\n    assert cfg.active_profile_id == \"p2\"\n    assert out[\"profiles\"] == cfg.profiles, \"params.profiles 未同步为干净列表\"\n    print(\"场景1 正常+畸形混合 ✅\")\n\n    # 场景2：全畸形 → 跳过分支、不覆盖原值（★易漏的守护：不能把用户预设清空）\n    cfg = FakeConfig()\n    params = {\"profiles\": [{\"name\": \"x\"}, {\"id\": \"\"}], \"active_profile_id\": \"p9\"}\n    out, cfg = run_flow(params, cfg)\n    assert cfg.profiles == [{\"id\": \"p1\", \"name\": \"A\"}], f\"全畸形时误覆盖原预设: {cfg.profiles}\"\n    assert cfg.active_profile_id == \"p1\", f\"active 被误改: {cfg.active_profile_id}\"\n    print(\"场景2 全畸形跳过、不覆盖原值 ✅\")\n\n    # 场景3：正常多个 → 全部保留\n    cfg = FakeConfig()\n    params = {\"profiles\": [{\"id\": \"p1\", \"name\": \"A\", \"api_url\": \"u1\"}, {\"id\": \"p2\", \"name\": \"B\"}],\n              \"active_profile_id\": \"p2\"}\n    out, cfg = run_flow(params, cfg)\n    assert [p[\"id\"] for p in cfg.profiles] == [\"p1\", \"p2\"], f\"正常项被误删: {cfg.profiles}\"\n    assert cfg.active_profile_id == \"p2\"\n    print(\"场景3 正常多项 ✅\")\n\n    # 场景4：空列表 → 不进分支、原值保留\n    cfg = FakeConfig()\n    params = {\"profiles\": [], \"active_profile_id\": \"zz\"}\n    out, cfg = run_flow(params, cfg)\n    assert cfg.profiles == [{\"id\": \"p1\", \"name\": \"A\"}], f\"空列表误覆盖: {cfg.profiles}\"\n    print(\"场景4 空列表 ✅\")\n\n    print(\"🎉 全部隔离逻辑测试通过\")\n\n\nif __name__ == \"__main__\":\n    main()",
+  "capabilities": [
+    "code.review",
+    "code.quality",
+    "code.test.isolation",
+    "code.guardrail"
+  ],
+  "dependencies": [
+    {
+      "name": "python",
+      "type": "python",
+      "version": "*"
+    }
+  ],
+  "resources": {
+    "memory_mb": 64,
+    "disk_mb": 5,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "workspace"
+    ]
+  }
+}
