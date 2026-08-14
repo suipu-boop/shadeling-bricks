@@ -1,0 +1,33 @@
+{
+  "name": "memory-cluster",
+  "summary": "语义聚类：记忆记录自动聚合。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "MemoryBrick（memory_kind=cluster）。注册语义聚类能力（cluster / cluster_members），把零散记忆记录聚成簇，缺了不影响核心闭环。",
+  "category": "memory",
+  "memory_kind": "cluster",
+  "tags": [
+    "memory",
+    "cluster"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "capabilities": [
+    "memory.cluster"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 8,
+    "disk_mb": 4,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "longterm"
+    ]
+  }
+}

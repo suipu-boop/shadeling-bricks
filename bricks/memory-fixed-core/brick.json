@@ -1,0 +1,34 @@
+{
+  "name": "memory-fixed-core",
+  "summary": "固定核：手填核心价值观 + 归纳引擎自动填充的智能槽（可衰减可删）。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "MemoryBrick（memory_kind=fixed-core）。注册固定核能力（set_core / get_core / export_core + 智能槽 set_smart_slot 等），手填核心价值观与自动填充的智能槽都防过度自信，缺了不影响核心闭环。",
+  "category": "memory",
+  "memory_kind": "fixed-core",
+  "tags": [
+    "memory",
+    "fixed-core",
+    "values"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "capabilities": [
+    "memory.fixed-core"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 8,
+    "disk_mb": 4,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "longterm"
+    ]
+  }
+}

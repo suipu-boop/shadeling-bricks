@@ -80,6 +80,70 @@
       "risk_level": "medium",
       "summary": "OpenAI 兼容网络推理端点模板，api_url / api_key 由用户显式填写。",
       "path": "bricks/engine-api/"
+    },
+    {
+      "name": "memory-core",
+      "version": "1.0.0",
+      "category": "memory",
+      "risk_level": "low",
+      "summary": "最小记忆闭环：对话存档 + 召回 + 每轮自动浮现，唯一必装记忆积木。",
+      "path": "bricks/memory-core/"
+    },
+    {
+      "name": "memory-portrait",
+      "version": "1.0.0",
+      "category": "memory",
+      "risk_level": "low",
+      "summary": "用户画像：属性 + 置信度 + 证据的可衰减长期画像。",
+      "path": "bricks/memory-portrait/"
+    },
+    {
+      "name": "memory-fixed-core",
+      "version": "1.0.0",
+      "category": "memory",
+      "risk_level": "low",
+      "summary": "固定核：手填核心价值观 + 归纳引擎自动填充的智能槽（可衰减可删）。",
+      "path": "bricks/memory-fixed-core/"
+    },
+    {
+      "name": "memory-cluster",
+      "version": "1.0.0",
+      "category": "memory",
+      "risk_level": "low",
+      "summary": "语义聚类：记忆记录自动聚合。",
+      "path": "bricks/memory-cluster/"
+    },
+    {
+      "name": "memory-cooccurrence",
+      "version": "1.0.0",
+      "category": "memory",
+      "risk_level": "low",
+      "summary": "关键词共现：用于查询扩展的共现图。",
+      "path": "bricks/memory-cooccurrence/"
+    },
+    {
+      "name": "memory-suggest",
+      "version": "1.0.0",
+      "category": "memory",
+      "risk_level": "low",
+      "summary": "主动推送 + 反馈闭环。",
+      "path": "bricks/memory-suggest/"
+    },
+    {
+      "name": "memory-consolidation",
+      "version": "1.0.0",
+      "category": "memory",
+      "risk_level": "low",
+      "summary": "夜间巩固：异步归纳 + 冷标记衰减 + 骨架整理。",
+      "path": "bricks/memory-consolidation/"
+    },
+    {
+      "name": "memory-cabinet",
+      "version": "1.0.0",
+      "category": "memory",
+      "risk_level": "low",
+      "summary": "文件柜：文件索引 + 项目抽屉/知识图谱。",
+      "path": "bricks/memory-cabinet/"
     }
   ],
   "updated_at": "2026-08-14"

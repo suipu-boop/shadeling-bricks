@@ -1,0 +1,36 @@
+{
+  "name": "memory-suggest",
+  "summary": "主动推送 + 反馈闭环。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "MemoryBrick（memory_kind=suggest）。注册主动建议能力（suggest / record_feedback），复用 memory-core 的召回做主动推送并收集反馈。依赖 memory-core（requires）。",
+  "category": "memory",
+  "memory_kind": "suggest",
+  "tags": [
+    "memory",
+    "suggest",
+    "push"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "capabilities": [
+    "memory.suggest"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 8,
+    "disk_mb": 4,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [
+      "memory-core"
+    ],
+    "conflicts_with": [],
+    "memory_scope": [
+      "longterm"
+    ]
+  }
+}
