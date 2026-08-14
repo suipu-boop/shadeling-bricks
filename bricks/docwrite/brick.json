@@ -1,0 +1,50 @@
+{
+  "name": "docwrite",
+  "trigger": [
+    "生成文档",
+    "写word",
+    "做ppt",
+    "生成excel",
+    "写报告",
+    "做表格",
+    "写文档",
+    "docwrite"
+  ],
+  "summary": "生成 docx / xlsx / pptx 文档（纯 stdlib 拼装，零 LLM token）。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "工具型积木（ToolBrick）。通过 provides_tool 委托内核内置 DocWrite handler（ToolProviderRegistry 注册的 build_docwrite_tool），技能包不携带可执行代码。支持 business-blue / forest-green / sunset-orange / mono-gray / royal-purple / midnight-dark 六套模板，按 section / sheet / slide 结构生成 Word / Excel / PPT。",
+  "category": "tool",
+  "provides_tool": "DocWrite",
+  "tags": [
+    "docwrite",
+    "tool",
+    "document",
+    "docx",
+    "xlsx",
+    "pptx"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "capabilities": [
+    "tool.docwrite",
+    "doc.generate.docx",
+    "doc.generate.xlsx",
+    "doc.generate.pptx"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 32,
+    "disk_mb": 5,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "workspace"
+    ]
+  }
+}

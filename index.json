@@ -32,6 +32,14 @@
       "risk_level": "low",
       "summary": "在对话中生成内联解释图（流程 / 对比 / 架构 / 矩阵），聊天界面自动渲染。",
       "path": "bricks/visualize/"
+    },
+    {
+      "name": "docwrite",
+      "version": "1.0.0",
+      "category": "tool",
+      "risk_level": "low",
+      "summary": "生成 docx / xlsx / pptx 文档（纯 stdlib 拼装，零 LLM token），经 provides_tool 委托内核 DocWrite handler。",
+      "path": "bricks/docwrite/"
     }
   ],
   "updated_at": "2026-08-14"
