@@ -1,0 +1,36 @@
+{
+  "name": "engine-api",
+  "summary": "OpenAI 兼容网络推理端点模板，api_url / api_key 由用户显式填写。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "EngineBrick（engine_kind=api）。委托内核内置引擎池 EngineProviderRegistry 构建 ApiEngine（OpenAI 兼容 /chat/completions）。积木不携带任何硬编码端点——api_url / api_key / api_model 均由用户在设置中显式填写后才出站，未填写时视为不可用（is_available=False）。",
+  "category": "engine",
+  "engine_kind": "api",
+  "tags": [
+    "engine",
+    "api",
+    "openai-compatible",
+    "remote"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "capabilities": [
+    "engine.api",
+    "infer.remote"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 16,
+    "disk_mb": 1,
+    "network": true,
+    "ports": []
+  },
+  "risk_level": "medium",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "session"
+    ]
+  }
+}

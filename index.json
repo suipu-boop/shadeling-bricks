@@ -64,6 +64,22 @@
       "risk_level": "low",
       "summary": "把对话/录音整理成待办+决议的会议纪要",
       "path": "bricks/meeting-minutes/"
+    },
+    {
+      "name": "engine-local",
+      "version": "1.0.0",
+      "category": "engine",
+      "risk_level": "low",
+      "summary": "本地 GGUF 推理后端（llama_cpp + Metal），推理不出本机，隐私优先。",
+      "path": "bricks/engine-local/"
+    },
+    {
+      "name": "engine-api",
+      "version": "1.0.0",
+      "category": "engine",
+      "risk_level": "medium",
+      "summary": "OpenAI 兼容网络推理端点模板，api_url / api_key 由用户显式填写。",
+      "path": "bricks/engine-api/"
     }
   ],
   "updated_at": "2026-08-14"

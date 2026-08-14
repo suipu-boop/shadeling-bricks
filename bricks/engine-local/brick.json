@@ -1,0 +1,38 @@
+{
+  "name": "engine-local",
+  "summary": "本地 GGUF 推理后端（llama_cpp + Metal），推理不出本机，隐私优先。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "EngineBrick（engine_kind=local）。委托内核内置引擎池 EngineProviderRegistry 构建 LocalGGUFEngine（llama_cpp + Metal，decode 串行化）。无网络依赖，推理全程不出本机；GGUF 模型文件由用户在设置中选择或放入模型目录。积木不携带可执行代码、不携带模型权重。",
+  "category": "engine",
+  "engine_kind": "local",
+  "tags": [
+    "engine",
+    "local",
+    "gguf",
+    "llama-cpp",
+    "metal"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "capabilities": [
+    "engine.local",
+    "infer.local",
+    "infer.gguf"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 4096,
+    "disk_mb": 4096,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "session"
+    ]
+  }
+}
