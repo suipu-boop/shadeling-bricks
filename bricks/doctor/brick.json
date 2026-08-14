@@ -1,0 +1,54 @@
+{
+  "name": "doctor",
+  "trigger": [
+    "自检",
+    "健康检查",
+    "诊断",
+    "doctor",
+    "体检",
+    "检查状态"
+  ],
+  "summary": "内核健康自检：运行 doctor 检查各子系统状态。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "按钮技能积木（PromptBrick）。基于内核 _h_doctor / _run_doctor（内核自检），提供「运行自检」按钮。检查记忆层、引擎、连接器、配置等子系统健康状态，输出诊断报告。",
+  "category": "内置",
+  "tags": [
+    "doctor",
+    "自检",
+    "健康",
+    "诊断",
+    "按钮"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "content": "你是 Shadeling 的健康自检助手。用户需要检查系统状态时，按以下方式操作（经 IPC 调用内核 handler）：\n\n## 运行自检\n调用 doctor：运行内核自检（_run_doctor），检查记忆层、引擎、连接器、配置等子系统，返回诊断报告。\n\n## 解读报告\n- 报告含各子系统状态（ok / warn / error）与详情。\n- 有 error 项时，向用户说明问题与建议修复方向。",
+  "buttons": [
+    {
+      "id": "doctor",
+      "label": "运行自检",
+      "handler": "doctor",
+      "params": {},
+      "risk": "low"
+    }
+  ],
+  "capabilities": [
+    "doctor.run",
+    "system.diagnose"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 4,
+    "disk_mb": 0,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "workspace"
+    ]
+  }
+}

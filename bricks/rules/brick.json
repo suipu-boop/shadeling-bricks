@@ -1,0 +1,79 @@
+{
+  "name": "rules",
+  "trigger": [
+    "规则",
+    "持久规则",
+    "查看规则",
+    "新增规则",
+    "删除规则",
+    "重载规则",
+    "rules",
+    "SHADERULES"
+  ],
+  "summary": "持久规则注入：查看/新增/删除/重载 rules.json 与 SHADERULES.md，注入 system prompt。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "按钮技能积木（PromptBrick）。基于内核 rules.py::load_rules（读 rules.json / SHADERULES.md 注入 system prompt，零依赖）与新增 _h_rules_list / _h_rules_add / _h_rules_remove / _h_rules_reload 四个 handler，提供「查看规则 / 新增规则 / 删除规则 / 重载规则」四个按钮。规则持久化在 ~/.shadeling/config/rules.json。",
+  "category": "内置",
+  "tags": [
+    "rules",
+    "规则",
+    "持久",
+    "system prompt",
+    "按钮"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "content": "你是 Shadeling 的持久规则助手。用户需要管理持久规则时，按以下方式操作（经 IPC 调用内核 handler）：\n\n## 查看规则\n调用 rules_list：列出 rules.json 当前所有规则（id + 内容）。\n\n## 新增规则\n调用 rules_add，参数 content=规则内容。追加一条规则到 rules.json。\n\n## 删除规则\n调用 rules_remove，参数 rule_id=规则 id。从 rules.json 删除该规则。\n\n## 重载规则\n调用 rules_reload：重新加载 rules.json / SHADERULES.md，注入 system prompt。\n\n## 说明\n- 规则持久化在 ~/.shadeling/config/rules.json，重启后仍生效。\n- 新增/删除后需重载才注入当前会话。",
+  "buttons": [
+    {
+      "id": "rules_list",
+      "label": "查看规则",
+      "handler": "rules_list",
+      "params": {},
+      "risk": "low"
+    },
+    {
+      "id": "rules_add",
+      "label": "新增规则",
+      "handler": "rules_add",
+      "params": {"content": ""},
+      "risk": "low"
+    },
+    {
+      "id": "rules_remove",
+      "label": "删除规则",
+      "handler": "rules_remove",
+      "params": {"rule_id": ""},
+      "risk": "medium"
+    },
+    {
+      "id": "rules_reload",
+      "label": "重载规则",
+      "handler": "rules_reload",
+      "params": {},
+      "risk": "low"
+    }
+  ],
+  "capabilities": [
+    "rules.list",
+    "rules.add",
+    "rules.remove",
+    "rules.reload"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 4,
+    "disk_mb": 0,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "workspace"
+    ]
+  }
+}

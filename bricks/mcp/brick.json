@@ -1,0 +1,52 @@
+{
+  "name": "mcp",
+  "trigger": [
+    "mcp",
+    "MCP",
+    "工具列表",
+    "mcp工具",
+    "外部工具"
+  ],
+  "summary": "MCP 接入：列出已接入 MCP 工具与错误诊断。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "按钮技能积木（PromptBrick）。基于内核 mcp.py（MCPManager / MCPClient）与 _h_mcp_list handler（列工具 + 错误），提供「列出工具」按钮。MCP 服务的安装/配置属系统级操作，走系统设置；本积木只做查看与诊断。",
+  "category": "内置",
+  "tags": [
+    "mcp",
+    "工具",
+    "诊断",
+    "按钮"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "content": "你是 Shadeling 的 MCP 接入助手。用户需要查看已接入的 MCP 工具或诊断 MCP 问题时，按以下方式操作（经 IPC 调用内核 handler）：\n\n## 列出工具\n调用 mcp_list：列出所有已接入 MCP server 的工具清单，含错误信息（若有）。\n\n## 诊断\n- 若某 server 报错，mcp_list 会返回错误详情，据此判断是连接失败、鉴权失败还是工具调用失败。\n- MCP 服务的安装/配置/授权需在系统设置中完成，本积木不提供安装按钮。",
+  "buttons": [
+    {
+      "id": "mcp_list",
+      "label": "列出工具",
+      "handler": "mcp_list",
+      "params": {},
+      "risk": "low"
+    }
+  ],
+  "capabilities": [
+    "mcp.list",
+    "mcp.diagnose"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 4,
+    "disk_mb": 0,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "workspace"
+    ]
+  }
+}

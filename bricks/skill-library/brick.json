@@ -1,0 +1,89 @@
+{
+  "name": "skill-library",
+  "trigger": [
+    "技能市场",
+    "技能库",
+    "安装技能",
+    "卸载技能",
+    "升级技能",
+    "技能评审",
+    "技能列表",
+    "skill"
+  ],
+  "summary": "技能市场：技能列表、安装、卸载、升级、评审。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "按钮技能积木（PromptBrick）。基于内核 skill_library.py::SkillLibrary（install / uninstall / upgrade / review / list_entries）与 _h_skill_library_list / _h_skill_library_install / _h_skill_library_uninstall / _h_skill_library_upgrade / _h_skill_library_review 五个 handler，提供「技能列表 / 安装技能 / 卸载技能 / 升级技能 / 评审技能」五个按钮。",
+  "category": "内置",
+  "tags": [
+    "skill",
+    "技能",
+    "市场",
+    "安装",
+    "卸载",
+    "升级",
+    "按钮"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "content": "你是 Shadeling 的技能市场助手。用户需要管理技能时，按以下方式操作（经 IPC 调用内核 handler）：\n\n## 技能列表\n调用 skill_library_list：列出已安装技能（名称 + 版本）。\n\n## 安装技能\n调用 skill_library_install，参数 skill_id=技能 id。从技能市场仓库安装技能。\n\n## 卸载技能\n调用 skill_library_uninstall，参数 skill_id=技能 id。卸载已安装技能。\n\n## 升级技能\n调用 skill_library_upgrade，参数 skill_id=技能 id。升级到最新版本。\n\n## 评审技能\n调用 skill_library_review，参数 skill_id=技能 id。对技能做安全/质量评审。\n\n## 安全红线\n- 安装/升级技能前，先 review 该技能，确认无恶意代码。\n- 卸载技能是移除操作，执行前向用户确认。",
+  "buttons": [
+    {
+      "id": "skill_library_list",
+      "label": "技能列表",
+      "handler": "skill_library_list",
+      "params": {},
+      "risk": "low"
+    },
+    {
+      "id": "skill_library_install",
+      "label": "安装技能",
+      "handler": "skill_library_install",
+      "params": {"skill_id": ""},
+      "risk": "medium"
+    },
+    {
+      "id": "skill_library_uninstall",
+      "label": "卸载技能",
+      "handler": "skill_library_uninstall",
+      "params": {"skill_id": ""},
+      "risk": "medium"
+    },
+    {
+      "id": "skill_library_upgrade",
+      "label": "升级技能",
+      "handler": "skill_library_upgrade",
+      "params": {"skill_id": ""},
+      "risk": "medium"
+    },
+    {
+      "id": "skill_library_review",
+      "label": "评审技能",
+      "handler": "skill_library_review",
+      "params": {"skill_id": ""},
+      "risk": "low"
+    }
+  ],
+  "capabilities": [
+    "skill.list",
+    "skill.install",
+    "skill.uninstall",
+    "skill.upgrade",
+    "skill.review"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 4,
+    "disk_mb": 0,
+    "network": true,
+    "ports": []
+  },
+  "risk_level": "medium",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "workspace"
+    ]
+  }
+}

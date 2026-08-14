@@ -168,7 +168,63 @@
       "risk_level": "low",
       "summary": "本地小模型增强：内容总结（summarize）+ 语义召回（semantic_recall）。",
       "path": "bricks/memory-smol/"
+    },
+    {
+      "name": "telegram",
+      "version": "1.0.0",
+      "category": "connector",
+      "risk_level": "medium",
+      "summary": "手机 Telegram ↔ 本地 Shadeling 的文本桥：bot 出站建连、白名单鉴权、默认关闭。",
+      "path": "bricks/telegram/"
+    },
+    {
+      "name": "multi-agent",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "low",
+      "summary": "多 agent 编排：派生子任务（SpawnAgent）、等待结果（WaitTask）、任务列表、取消任务。",
+      "path": "bricks/multi-agent/"
+    },
+    {
+      "name": "scheduler",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "low",
+      "summary": "后台异步任务管理：提交任务、任务列表、任务详情、取消任务。",
+      "path": "bricks/scheduler/"
+    },
+    {
+      "name": "rules",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "low",
+      "summary": "持久规则注入：查看/新增/删除/重载 rules.json 与 SHADERULES.md，注入 system prompt。",
+      "path": "bricks/rules/"
+    },
+    {
+      "name": "mcp",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "low",
+      "summary": "MCP 接入：列出已接入 MCP 工具与错误诊断。",
+      "path": "bricks/mcp/"
+    },
+    {
+      "name": "skill-library",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "medium",
+      "summary": "技能市场：技能列表、安装、卸载、升级、评审。",
+      "path": "bricks/skill-library/"
+    },
+    {
+      "name": "doctor",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "low",
+      "summary": "内核健康自检：运行 doctor 检查各子系统状态。",
+      "path": "bricks/doctor/"
     }
   ],
-  "updated_at": "2026-08-14"
+  "updated_at": "2026-08-14T20:48:34"
 }

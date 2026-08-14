@@ -3,7 +3,7 @@
   "summary": "主动推送 + 反馈闭环。",
   "version": "1.0.0",
   "author": "Shadeling",
-  "description": "MemoryBrick（memory_kind=suggest）。注册主动建议能力（suggest / record_feedback），复用 memory-core 的召回做主动推送并收集反馈。依赖 memory-core（requires）。",
+  "description": "MemoryBrick（memory_kind=suggest）。注册主动建议能力（suggest / record_feedback），复用 memory-core 的召回做主动推送并收集反馈。依赖 memory-core（requires）。职责边界：suggest 管「主动推送 + 反馈闭环」主动链路（suggest 基于召回主动给建议、record_feedback 采纳/拒绝回流）；被动链路（archive/recall/surface）由 memory-core 承担，suggest 不重复落档。",
   "category": "memory",
   "memory_kind": "suggest",
   "tags": [

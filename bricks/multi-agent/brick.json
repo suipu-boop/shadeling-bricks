@@ -1,0 +1,80 @@
+{
+  "name": "multi-agent",
+  "trigger": [
+    "子任务",
+    "派生子任务",
+    "多agent",
+    "多智能体",
+    "编排",
+    "spawn",
+    "wait",
+    "子agent"
+  ],
+  "summary": "多 agent 编排：派生子任务（SpawnAgent）、等待结果（WaitTask）、任务列表、取消任务。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "按钮技能积木（PromptBrick）。基于内核 _h_task_submit / _h_task_get / _h_task_list / _h_task_cancel 四个 handler（绑定 scheduler 的多 agent 编排原语 SpawnAgent / WaitTask），提供「派生子任务 / 等待结果 / 任务列表 / 取消任务」四个按钮。子任务后台异步执行，可查询状态与结果。",
+  "category": "内置",
+  "tags": [
+    "multi-agent",
+    "spawn",
+    "wait",
+    "编排",
+    "子任务",
+    "按钮"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "content": "你是 Shadeling 的多 agent 编排助手。用户需要派生子任务、等待子任务结果、查看或取消任务时，按以下方式操作（经 IPC 调用内核 handler）：\n\n## 派生子任务（SpawnAgent）\n调用 task_submit，参数 prompt=子任务指令，project=所属项目（可选）。内核会创建后台异步任务并返回 task_id。\n\n## 等待结果（WaitTask）\n调用 task_get，参数 task_id=子任务 id。返回任务状态（pending/running/done/failed）与结果。\n\n## 任务列表\n调用 task_list，参数 status=可选过滤（pending/running/done/failed）。列出所有任务。\n\n## 取消任务\n调用 task_cancel，参数 task_id=任务 id。取消未完成的任务。\n\n## 使用建议\n- 派生子任务后，用 task_get 轮询结果，不要阻塞主对话。\n- 子任务与主任务共享记忆/会话库，注意隔离 prompt 上下文。",
+  "buttons": [
+    {
+      "id": "task_submit",
+      "label": "派生子任务",
+      "handler": "task_submit",
+      "params": {"prompt": "", "project": ""},
+      "risk": "low"
+    },
+    {
+      "id": "task_get",
+      "label": "等待结果",
+      "handler": "task_get",
+      "params": {"task_id": ""},
+      "risk": "low"
+    },
+    {
+      "id": "task_list",
+      "label": "任务列表",
+      "handler": "task_list",
+      "params": {"status": ""},
+      "risk": "low"
+    },
+    {
+      "id": "task_cancel",
+      "label": "取消任务",
+      "handler": "task_cancel",
+      "params": {"task_id": ""},
+      "risk": "medium"
+    }
+  ],
+  "capabilities": [
+    "agent.spawn",
+    "agent.wait",
+    "agent.list",
+    "agent.cancel"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 4,
+    "disk_mb": 0,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "workspace"
+    ]
+  }
+}

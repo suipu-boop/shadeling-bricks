@@ -18,7 +18,25 @@
   "source": "builtin",
   "capabilities": [
     "vault.core",
-    "vault.query"
+    "vault.query",
+    "vault.ocr",
+    "vault.snapshot"
+  ],
+  "buttons": [
+    {
+      "id": "vault_ocr",
+      "label": "OCR 文本入库",
+      "handler": "vault_ocr",
+      "params": {"id": "", "file_path": "", "text": ""},
+      "risk": "low"
+    },
+    {
+      "id": "vault_snapshot",
+      "label": "网页快照入库",
+      "handler": "vault_snapshot",
+      "params": {"url": "", "title": ""},
+      "risk": "low"
+    }
   ],
   "dependencies": [],
   "resources": {
