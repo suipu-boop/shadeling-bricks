@@ -1,0 +1,43 @@
+{
+  "name": "memory-smol",
+  "summary": "本地小模型增强：内容总结（summarize）+ 语义召回（semantic_recall）。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "MemoryBrick（memory_kind=smol）。注册本地小模型增强能力：summarize 用本地 GGUF 小模型（Qwen2.5-1.5B-Instruct / Llama-3.2-1B）做内容总结，semantic_recall 用 bge-small-zh-v1.5 做语义召回。经 extract_via 双轨接入，无引擎时安全降级（KeywordExtractor / 关键词打分），不影响核心闭环。依赖 memory-core。",
+  "category": "memory",
+  "memory_kind": "smol",
+  "tags": [
+    "memory",
+    "smol",
+    "llm",
+    "embedding",
+    "summarize",
+    "semantic"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "capabilities": [
+    "memory.smol",
+    "memory.summarize",
+    "memory.semantic_recall"
+  ],
+  "dependencies": [
+    {"name": "memory-core", "type": "skill", "version": "*"}
+  ],
+  "resources": {
+    "memory_mb": 4096,
+    "disk_mb": 0,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [
+      "memory-core"
+    ],
+    "conflicts_with": [],
+    "memory_scope": [
+      "longterm"
+    ]
+  }
+}

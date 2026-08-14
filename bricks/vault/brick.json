@@ -1,0 +1,38 @@
+{
+  "name": "vault",
+  "summary": "本地资产中枢：文档/网页/笔记/图片/技能快照的增删查、检索、提醒、扫描。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "ServiceBrick（service_kind=vault）。挂载 VaultStore 服务并注册 vault_query 检索工具，供 AI 检索本地资产；UI 命令栏经 _h_vault_* handler 共用同一存储。与 memory-cabinet 平级、独立，将来可扩展更多资产类型与功能。",
+  "category": "service",
+  "service_kind": "vault",
+  "tags": [
+    "vault",
+    "asset",
+    "service",
+    "document",
+    "webpage",
+    "note"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "capabilities": [
+    "vault.core",
+    "vault.query"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 8,
+    "disk_mb": 64,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "longterm"
+    ]
+  }
+}

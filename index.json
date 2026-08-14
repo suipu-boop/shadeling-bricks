@@ -144,6 +144,30 @@
       "risk_level": "low",
       "summary": "文件柜：文件索引 + 项目抽屉/知识图谱。",
       "path": "bricks/memory-cabinet/"
+    },
+    {
+      "name": "vault",
+      "version": "1.0.0",
+      "category": "service",
+      "risk_level": "low",
+      "summary": "本地资产中枢：文档/网页/笔记/图片/技能快照的增删查、检索、提醒、扫描。",
+      "path": "bricks/vault/"
+    },
+    {
+      "name": "backup-restore",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "medium",
+      "summary": "傻瓜式备份/恢复：一键备份、指定备份、恢复、查看备份列表。",
+      "path": "bricks/backup-restore/"
+    },
+    {
+      "name": "memory-smol",
+      "version": "1.0.0",
+      "category": "memory",
+      "risk_level": "low",
+      "summary": "本地小模型增强：内容总结（summarize）+ 语义召回（semantic_recall）。",
+      "path": "bricks/memory-smol/"
     }
   ],
   "updated_at": "2026-08-14"
