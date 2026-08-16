@@ -3,7 +3,7 @@
   "summary": "手机 Telegram ↔ 本地 Shadeling 的文本桥：bot 出站建连、白名单鉴权、默认关闭。",
   "version": "1.0.0",
   "author": "Shadeling",
-  "description": "Telegram 连接器（TelegramConnector，继承 Gateway）。通过 Telegram Bot 出站建连（免公网 IP）接收手机 Telegram 消息，经本地 IPC（127.0.0.1，与 Swift UI 同契约）调用 agent 聊天，再把回复回发 Telegram。复用 ~/.shadeling 记忆/会话库；白名单鉴权，仅响应 allowed_user_ids；凭据存 ~/.shadeling/config/telegram.json，不进 git、不进记忆库；默认关闭。依赖 python-telegram-bot（官方 SDK）。与 feishu 连接器同构。",
+  "description": "Telegram 连接器（TelegramConnector，继承 Gateway）。通过 Telegram Bot 出站建连（免公网 IP）接收手机 Telegram 消息，经本地 IPC（127.0.0.1，与 Swift UI 同契约）调用 agent 聊天，再把回复回发 Telegram。复用 ~/.brickery 记忆/会话库；白名单鉴权，仅响应 allowed_user_ids；凭据存 ~/.brickery/config/telegram.json，不进 git、不进记忆库；默认关闭。依赖 python-telegram-bot（官方 SDK）。与 feishu 连接器同构。",
   "category": "connector",
   "tags": [
     "telegram",
@@ -42,5 +42,11 @@
       "session",
       "project"
     ]
-  }
+  },
+  "files": [
+    {
+      "src": "telegram.py",
+      "dest": "runtime/connectors/telegram.py"
+    }
+  ]
 }
