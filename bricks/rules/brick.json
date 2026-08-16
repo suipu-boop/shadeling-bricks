@@ -24,7 +24,7 @@
   ],
   "license": "MIT",
   "source": "builtin",
-  "content": "你是 Shadeling 的持久规则助手。用户需要管理持久规则时，按以下方式操作（经 IPC 调用内核 handler）：\n\n## 查看规则\n调用 rules_list：列出 rules.json 当前所有规则（id + 内容）。\n\n## 新增规则\n调用 rules_add，参数 content=规则内容。追加一条规则到 rules.json。\n\n## 删除规则\n调用 rules_remove，参数 rule_id=规则 id。从 rules.json 删除该规则。\n\n## 重载规则\n调用 rules_reload：重新加载 rules.json / SHADERULES.md，注入 system prompt。\n\n## 说明\n- 规则持久化在 ~/.shadeling/config/rules.json，重启后仍生效。\n- 新增/删除后需重载才注入当前会话。",
+  "content": "你是 Shadeling 的持久规则助手。用户需要管理持久规则时，按以下方式操作（经 IPC 调用内核 handler）：\n\n## 查看规则\n调用 rules_list：列出 rules.json 当前所有规则（id + 内容）。\n\n## 新增规则\n调用 rules_add，参数 rule=规则内容。追加一条规则到 rules.json。\n\n## 删除规则\n调用 rules_remove，参数 index=规则下标（整数，从 0 开始）。从 rules.json 删除该规则。\n\n## 重载规则\n调用 rules_reload：重新加载 rules.json / SHADERULES.md，注入 system prompt。\n\n## 说明\n- 规则持久化在 ~/.shadeling/config/rules.json，重启后仍生效。\n- 新增/删除后需重载才注入当前会话。",
   "buttons": [
     {
       "id": "rules_list",
@@ -37,14 +37,18 @@
       "id": "rules_add",
       "label": "新增规则",
       "handler": "rules_add",
-      "params": {"content": ""},
+      "params": {
+        "rule": ""
+      },
       "risk": "low"
     },
     {
       "id": "rules_remove",
       "label": "删除规则",
       "handler": "rules_remove",
-      "params": {"rule_id": ""},
+      "params": {
+        "index": ""
+      },
       "risk": "medium"
     },
     {

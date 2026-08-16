@@ -26,7 +26,7 @@
   ],
   "license": "MIT",
   "source": "builtin",
-  "content": "你是 Shadeling 的技能市场助手。用户需要管理技能时，按以下方式操作（经 IPC 调用内核 handler）：\n\n## 技能列表\n调用 skill_library_list：列出已安装技能（名称 + 版本）。\n\n## 安装技能\n调用 skill_library_install，参数 skill_id=技能 id。从技能市场仓库安装技能。\n\n## 卸载技能\n调用 skill_library_uninstall，参数 skill_id=技能 id。卸载已安装技能。\n\n## 升级技能\n调用 skill_library_upgrade，参数 skill_id=技能 id。升级到最新版本。\n\n## 评审技能\n调用 skill_library_review，参数 skill_id=技能 id。对技能做安全/质量评审。\n\n## 安全红线\n- 安装/升级技能前，先 review 该技能，确认无恶意代码。\n- 卸载技能是移除操作，执行前向用户确认。",
+  "content": "你是 Shadeling 的技能市场助手。用户需要管理技能时，按以下方式操作（经 IPC 调用内核 handler）：\n\n## 技能列表\n调用 skill_library_list：列出已安装技能（名称 + 版本）。\n\n## 安装技能\n调用 skill_library_install，参数 id=技能 id。从技能市场仓库安装技能。\n\n## 卸载技能\n调用 skill_library_uninstall，参数 id=技能 id。卸载已安装技能。\n\n## 升级技能\n调用 skill_library_upgrade，参数 id=技能 id。升级到最新版本。\n\n## 评审技能\n调用 skill_library_review，参数 id=技能 id。对技能做安全/质量评审。\n\n## 安全红线\n- 安装/升级技能前，先 review 该技能，确认无恶意代码。\n- 卸载技能是移除操作，执行前向用户确认。",
   "buttons": [
     {
       "id": "skill_library_list",
@@ -39,28 +39,28 @@
       "id": "skill_library_install",
       "label": "安装技能",
       "handler": "skill_library_install",
-      "params": {"skill_id": ""},
+      "params": {"id": ""},
       "risk": "medium"
     },
     {
       "id": "skill_library_uninstall",
       "label": "卸载技能",
       "handler": "skill_library_uninstall",
-      "params": {"skill_id": ""},
+      "params": {"id": ""},
       "risk": "medium"
     },
     {
       "id": "skill_library_upgrade",
       "label": "升级技能",
       "handler": "skill_library_upgrade",
-      "params": {"skill_id": ""},
+      "params": {"id": ""},
       "risk": "medium"
     },
     {
       "id": "skill_library_review",
       "label": "评审技能",
       "handler": "skill_library_review",
-      "params": {"skill_id": ""},
+      "params": {"id": ""},
       "risk": "low"
     }
   ],
