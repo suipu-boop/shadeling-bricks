@@ -82,70 +82,6 @@
       "path": "bricks/engine-api/"
     },
     {
-      "name": "memory-core",
-      "version": "1.0.0",
-      "category": "memory",
-      "risk_level": "low",
-      "summary": "最小记忆闭环：对话存档 + 召回 + 每轮自动浮现，唯一必装记忆积木。",
-      "path": "bricks/memory-core/"
-    },
-    {
-      "name": "memory-portrait",
-      "version": "1.0.0",
-      "category": "memory",
-      "risk_level": "low",
-      "summary": "用户画像：属性 + 置信度 + 证据的可衰减长期画像。",
-      "path": "bricks/memory-portrait/"
-    },
-    {
-      "name": "memory-fixed-core",
-      "version": "1.0.0",
-      "category": "memory",
-      "risk_level": "low",
-      "summary": "固定核：手填核心价值观 + 归纳引擎自动填充的智能槽（可衰减可删）。",
-      "path": "bricks/memory-fixed-core/"
-    },
-    {
-      "name": "memory-cluster",
-      "version": "1.0.0",
-      "category": "memory",
-      "risk_level": "low",
-      "summary": "语义聚类：记忆记录自动聚合。",
-      "path": "bricks/memory-cluster/"
-    },
-    {
-      "name": "memory-cooccurrence",
-      "version": "1.0.0",
-      "category": "memory",
-      "risk_level": "low",
-      "summary": "关键词共现：用于查询扩展的共现图。",
-      "path": "bricks/memory-cooccurrence/"
-    },
-    {
-      "name": "memory-suggest",
-      "version": "1.0.0",
-      "category": "memory",
-      "risk_level": "low",
-      "summary": "主动推送 + 反馈闭环。",
-      "path": "bricks/memory-suggest/"
-    },
-    {
-      "name": "memory-consolidation",
-      "version": "1.0.0",
-      "category": "memory",
-      "risk_level": "low",
-      "summary": "夜间巩固：异步归纳 + 冷标记衰减 + 骨架整理。",
-      "path": "bricks/memory-consolidation/"
-    },
-    {
-      "name": "memory-cabinet",
-      "version": "1.0.0",
-      "category": "memory",
-      "risk_level": "low",
-      "summary": "文件柜：文件索引 + 项目抽屉/知识图谱。",
-      "path": "bricks/memory-cabinet/"
-    },
-    {
       "name": "vault",
       "version": "1.0.0",
       "category": "service",
@@ -160,14 +96,6 @@
       "risk_level": "medium",
       "summary": "傻瓜式备份/恢复：一键备份、指定备份、恢复、查看备份列表。",
       "path": "bricks/backup-restore/"
-    },
-    {
-      "name": "memory-smol",
-      "version": "1.0.0",
-      "category": "memory",
-      "risk_level": "low",
-      "summary": "记忆增强：自动总结长内容 + 按意思找回记忆，装上即用，模型可选。",
-      "path": "bricks/memory-smol/"
     },
     {
       "name": "telegram",
@@ -226,5 +154,5 @@
       "path": "bricks/doctor/"
     }
   ],
-  "updated_at": "2026-08-14T20:48:34"
+  "updated_at": "2026-08-16T12:20:58"
 }
