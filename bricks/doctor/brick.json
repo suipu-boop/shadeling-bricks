@@ -12,7 +12,7 @@
   "version": "1.0.0",
   "author": "Shadeling",
   "description": "按钮技能积木（PromptBrick）。基于内核 _h_doctor / _run_doctor（内核自检），提供「运行自检」按钮。检查记忆层、引擎、连接器、配置等子系统健康状态，输出诊断报告。",
-  "category": "内置",
+  "category": "基础",
   "tags": [
     "doctor",
     "自检",
@@ -50,5 +50,6 @@
     "memory_scope": [
       "workspace"
     ]
-  }
+  },
+  "updated_at": "2026-08-17 17:50:19"
 }

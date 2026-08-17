@@ -28,12 +28,12 @@
   "version": "1.0.0",
   "author": "Shadeling",
   "description": "当用户需要让 Shadeling 真正「动手」操作 macOS 上的图形界面时使用：点击某个按钮、在输入框填写文字、聚焦或切换到某个应用。底层用系统 Accessibility API（AXUIElement）读取元素树并触发动作，完全本地、零模型、不截图。",
-  "category": "内置",
+  "category": "基础",
   "tags": [
     "ax",
     "accessibility",
     "ui-automation",
-    "内置",
+    "基础",
     "desktop"
   ],
   "license": "MIT",
@@ -66,5 +66,6 @@
       "src": "axctl",
       "dest": "bin/ax/axctl"
     }
-  ]
+  ],
+  "updated_at": "2026-08-17 17:50:46"
 }

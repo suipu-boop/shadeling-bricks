@@ -16,7 +16,7 @@
   "version": "1.0.0",
   "author": "Shadeling",
   "description": "按钮技能积木（PromptBrick）。基于内核 _h_backup_export / _h_backup_restore / _h_backup_default / _h_backup_list 四个 handler，提供「一键备份 / 指定备份 / 恢复 / 查看备份列表 / 定时自动备份」五个傻瓜式按钮。恢复带标记校验防误覆盖，恢复后需重启 Shadeling 生效。",
-  "category": "内置",
+  "category": "基础",
   "tags": [
     "backup",
     "restore",
@@ -91,5 +91,6 @@
     "memory_scope": [
       "workspace"
     ]
-  }
+  },
+  "updated_at": "2026-08-17 17:50:19"
 }

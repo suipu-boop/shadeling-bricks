@@ -11,7 +11,7 @@
   "version": "1.0.0",
   "author": "Shadeling",
   "description": "按钮技能积木（PromptBrick）。基于内核 mcp.py（MCPManager / MCPClient）与 _h_mcp_list handler（列工具 + 错误），提供「列出工具」按钮。MCP 服务的安装/配置属系统级操作，走系统设置；本积木只做查看与诊断。",
-  "category": "内置",
+  "category": "基础",
   "tags": [
     "mcp",
     "工具",
@@ -48,5 +48,6 @@
     "memory_scope": [
       "workspace"
     ]
-  }
+  },
+  "updated_at": "2026-08-17 17:50:19"
 }

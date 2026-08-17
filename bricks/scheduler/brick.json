@@ -13,7 +13,7 @@
   "version": "1.0.0",
   "author": "Shadeling",
   "description": "按钮技能积木（PromptBrick）。基于内核 Scheduler（任务队列 + worker 池，tasks.jsonl 持久化、崩溃恢复）与 _h_task_submit / _h_task_list / _h_task_get / _h_task_cancel 四个 handler，提供「提交任务 / 任务列表 / 任务详情 / 取消任务」四个按钮。任务后台异步执行，状态持久化。",
-  "category": "内置",
+  "category": "基础",
   "tags": [
     "scheduler",
     "task",
@@ -29,28 +29,37 @@
       "id": "task_submit",
       "label": "提交任务",
       "handler": "task_submit",
-      "params": {"prompt": "", "project": ""},
+      "params": {
+        "prompt": "",
+        "project": ""
+      },
       "risk": "low"
     },
     {
       "id": "task_list",
       "label": "任务列表",
       "handler": "task_list",
-      "params": {"status": ""},
+      "params": {
+        "status": ""
+      },
       "risk": "low"
     },
     {
       "id": "task_get",
       "label": "任务详情",
       "handler": "task_get",
-      "params": {"task_id": ""},
+      "params": {
+        "task_id": ""
+      },
       "risk": "low"
     },
     {
       "id": "task_cancel",
       "label": "取消任务",
       "handler": "task_cancel",
-      "params": {"task_id": ""},
+      "params": {
+        "task_id": ""
+      },
       "risk": "medium"
     }
   ],
@@ -74,5 +83,6 @@
     "memory_scope": [
       "workspace"
     ]
-  }
+  },
+  "updated_at": "2026-08-17 17:50:19"
 }

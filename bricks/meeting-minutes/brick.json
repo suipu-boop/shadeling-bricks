@@ -10,7 +10,7 @@
   "version": "1.1.0",
   "author": "随朴",
   "description": "将一段对话或会议转录整理为：参会方、核心决议、行动项（负责人+截止）、未决问题。",
-  "category": "内置",
+  "category": "基础",
   "tags": [
     "会议纪要",
     "会议",
@@ -38,5 +38,6 @@
     "memory_scope": [
       "workspace"
     ]
-  }
+  },
+  "updated_at": "2026-08-17 17:50:19"
 }
