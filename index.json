@@ -30,7 +30,7 @@
       "version": "1.0.0",
       "category": "内置",
       "risk_level": "low",
-      "summary": "在对话中生成内联解释图（流程 / 对比 / 架构 / 矩阵），聊天界面自动渲染。",
+      "summary": "在对话中生成内联解释图（流程 / 对比 / 架构 / 矩阵 / 时间线 / 甘特图），聊天界面自动渲染。",
       "path": "bricks/visualize/"
     },
     {
@@ -38,7 +38,7 @@
       "version": "1.0.0",
       "category": "tool",
       "risk_level": "low",
-      "summary": "生成 docx / xlsx / pptx 文档（纯 stdlib 拼装，零 LLM token），经 provides_tool 委托内核 DocWrite handler。",
+      "summary": "生成 docx / xlsx / pptx 文档（纯 stdlib 拼装，零 LLM token）。",
       "path": "bricks/docwrite/"
     },
     {
@@ -154,5 +154,5 @@
       "path": "bricks/doctor/"
     }
   ],
-  "updated_at": "2026-08-16T12:20:58"
+  "updated_at": "2026-08-22"
 }

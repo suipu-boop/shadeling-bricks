@@ -26,7 +26,7 @@
   "version": "1.0.0",
   "author": "Shadeling",
   "description": "当用户需要「看」而非「读」时（解释概念、对比方案、画架构、梳理流程、列满足度矩阵、展示时间线、画甘特图），用内联 SVG 图辅助表达。图由聊天界面直接渲染，无需打开文件。",
-  "category": "基础",
+  "category": "内置",
   "tags": [
     "diagram",
     "visualization",

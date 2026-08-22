@@ -27,7 +27,7 @@
   "version": "1.0.0",
   "author": "Shadeling（对接 Tencent/BrowserSkill, MIT）",
   "description": "当用户需要 Shadeling 真正「动手」操作网页时使用，尤其涉及已登录网站：打开/导航网页、点按钮、填表单、抓页面结构化数据、截图、遇验证码/登录确认暂停交人。底层对接腾讯开源 BrowserSkill（bsk CLI + 浏览器扩展），复用真实登录态、隔离 Agent Window、内置 Human-in-loop。bsk 为外部工具，需本机安装（见技能内容引导），不随 Shadeling 安装包分发。",
-  "category": "基础",
+  "category": "内置",
   "tags": [
     "browser",
     "browserskill",

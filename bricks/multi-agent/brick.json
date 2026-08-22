@@ -14,7 +14,7 @@
   "version": "1.0.0",
   "author": "Shadeling",
   "description": "按钮技能积木（PromptBrick）。基于内核 _h_task_submit / _h_task_get / _h_task_list / _h_task_cancel 四个 handler（绑定 scheduler 的多 agent 编排原语 SpawnAgent / WaitTask），提供「派生子任务 / 等待结果 / 任务列表 / 取消任务」四个按钮。子任务后台异步执行，可查询状态与结果。",
-  "category": "基础",
+  "category": "内置",
   "tags": [
     "multi-agent",
     "spawn",

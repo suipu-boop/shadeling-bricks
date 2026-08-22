@@ -14,7 +14,7 @@
   "version": "1.0.0",
   "author": "Shadeling",
   "description": "按钮技能积木（PromptBrick）。基于内核 rules.py::load_rules（读 rules.json / SHADERULES.md 注入 system prompt，零依赖）与新增 _h_rules_list / _h_rules_add / _h_rules_remove / _h_rules_reload 四个 handler，提供「查看规则 / 新增规则 / 删除规则 / 重载规则」四个按钮。规则持久化在 ~/.shadeling/config/rules.json。",
-  "category": "基础",
+  "category": "内置",
   "tags": [
     "rules",
     "规则",

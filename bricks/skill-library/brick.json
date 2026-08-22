@@ -14,7 +14,7 @@
   "version": "1.0.0",
   "author": "Shadeling",
   "description": "按钮技能积木（PromptBrick）。基于内核 skill_library.py::SkillLibrary（install / uninstall / upgrade / review / list_entries）与 _h_skill_library_list / _h_skill_library_install / _h_skill_library_uninstall / _h_skill_library_upgrade / _h_skill_library_review 五个 handler，提供「技能列表 / 安装技能 / 卸载技能 / 升级技能 / 评审技能」五个按钮。",
-  "category": "基础",
+  "category": "内置",
   "tags": [
     "skill",
     "技能",
