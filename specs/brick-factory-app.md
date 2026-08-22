@@ -11,8 +11,10 @@ AIGC:
 
 # 积木加工厂 App（Brick Factory App）设计
 
-> 状态：待审阅（2026-08-22 用户拍板方向后落盘）
-> 关联：brickery/specs/brick-factory.md（原规划）、ARCHITECTURE.md（三项目全局）
+> 状态：**已迁出**（2026-08-22 工厂独立为 brickery-factory 仓库，本文档仅留档）
+> 设计正文与实施记录已移至 [brickery-factory/specs/brick-factory-app.md](https://github.com/suipu-boop/brickery-factory/blob/main/specs/brick-factory-app.md)
+> 本仓库（brick-vault / shadeling-bricks）现只保留：积木库本体（bricks/ + index.json）与验证闸门（scripts/verify_bricks.py）
+> 关联：ARCHITECTURE.md（四项目全局）、brickery-factory/specs/（工厂设计权威版）
 > 定位：工坊（Workbench）= 消费积木；加工厂（Factory）= 生产积木。本设计把加工厂做成**独立 app**，不是纯网页版。
 
 ## 一、用户拍板的方向
