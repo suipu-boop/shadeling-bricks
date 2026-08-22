@@ -152,6 +152,14 @@
       "risk_level": "low",
       "summary": "内核健康自检：运行 doctor 检查各子系统状态。",
       "path": "bricks/doctor/"
+    },
+    {
+      "name": "hello-marvis",
+      "version": "1.0.0",
+      "category": "tool",
+      "risk_level": "low",
+      "summary": "向用户问好并返回当前时间（纯 Python 标准库，零依赖）。",
+      "path": "bricks/hello-marvis/"
     }
   ],
   "updated_at": "2026-08-22"

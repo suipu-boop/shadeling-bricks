@@ -1,0 +1,49 @@
+{
+  "name": "hello-marvis",
+  "trigger": [
+    "问好",
+    "你好",
+    "打招呼",
+    "报时",
+    "当前时间",
+    "现在几点",
+    "hello",
+    "hi marvis",
+    "hello-marvis"
+  ],
+  "summary": "向用户问好并返回当前时间（纯 Python 标准库，零依赖）。",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "description": "工具型积木（ToolBrick）。提供 Python 工具函数 greet()：按本地时段生成问候语（早上好/下午好/晚上好），并返回当前本地时间、星期与 Unix 时间戳。纯 stdlib（datetime）实现，无网络、无第三方依赖、无落盘，可直接 python files/main.py 试运行。",
+  "category": "tool",
+  "tags": [
+    "hello",
+    "greeting",
+    "time",
+    "tool",
+    "python",
+    "marvis"
+  ],
+  "license": "MIT",
+  "source": "local",
+  "capabilities": [
+    "tool.hello-marvis",
+    "greet.user",
+    "time.now"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 16,
+    "disk_mb": 1,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "session"
+    ]
+  }
+}
