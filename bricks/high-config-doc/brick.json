@@ -28,9 +28,9 @@
     "复杂排版"
   ],
   "license": "MIT",
-  "source": "github.com/suipu-boop/shadeling-skills",
+  "source": "github.com/suipu-boop/shadeling-bricks",
   "provides_tool": "DocWritePro",
-  "binary_url": "https://github.com/suipu-boop/shadeling-skills/releases/download/v1.0.0/editor_sdk",
+  "binary_url": "https://github.com/suipu-boop/shadeling-bricks/releases/download/v1.0.0/editor_sdk",
   "binary_size": 202541440,
   "binary_sha256": "7d55e4c0840465dcd91fc1d865126b6e79321392cbb0d999b9d450d4f4b8bba2",
   "binary_launch": {

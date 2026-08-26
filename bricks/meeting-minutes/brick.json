@@ -18,7 +18,7 @@
     "待办"
   ],
   "license": "MIT",
-  "source": "github.com/suipu-boop/shadeling-skills",
+  "source": "github.com/suipu-boop/shadeling-bricks",
   "content": "你负责把会议内容整理成纪要。输出固定四段：\n一、参会与背景（1 句）；\n二、核心决议（要点列表）；\n三、行动项（表格：事项 | 负责人 | 截止 | 状态）；\n四、未决问题。\n只基于给定内容，不补充未提及的负责人或日期。",
   "capabilities": [
     "meeting.minutes",
