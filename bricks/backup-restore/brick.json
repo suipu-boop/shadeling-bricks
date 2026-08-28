@@ -31,15 +31,15 @@
     {
       "id": "backup_default",
       "label": "一键备份",
-      "handler": "backup_default",
-      "params": {},
+      "action": "backup_default",
+      "args": {},
       "risk": "low"
     },
     {
       "id": "backup_export",
       "label": "指定备份",
-      "handler": "backup_export",
-      "params": {
+      "action": "backup_export",
+      "args": {
         "dest_dir": ""
       },
       "risk": "low"
@@ -47,8 +47,8 @@
     {
       "id": "backup_restore",
       "label": "恢复",
-      "handler": "backup_restore",
-      "params": {
+      "action": "backup_restore",
+      "args": {
         "src_dir": ""
       },
       "risk": "high"
@@ -56,15 +56,15 @@
     {
       "id": "backup_list",
       "label": "查看备份列表",
-      "handler": "backup_list",
-      "params": {},
+      "action": "backup_list",
+      "args": {},
       "risk": "low"
     },
     {
       "id": "backup_scheduled",
       "label": "定时自动备份",
-      "handler": "task_submit",
-      "params": {
+      "action": "task_submit",
+      "args": {
         "prompt": "执行一键备份",
         "project": "backup"
       },

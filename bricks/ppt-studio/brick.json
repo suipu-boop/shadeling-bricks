@@ -1,0 +1,90 @@
+{
+  "name": "ppt-studio",
+  "trigger": [
+    "生成 PPT",
+    "ppt 生成",
+    "PPT 加工台",
+    "ppt-studio"
+  ],
+  "summary": "PPT 生成积木：把一段中文 structure（标题/副标题/作者/日期/章节/要点）渲染成真实 .pptx 文件，输出到运行实例 home/output_pptx/。基于本地 ppt_brick 渲染底座（theme 派生 token + registry 版式 + generator 编排），零 LLM token、离线可用。",
+  "version": "0.1.0",
+  "author": "Shadeling",
+  "description": "平台 PPT 生成能力积木。声明 buttons（生成 PPT，走受控前缀 ppt_，点击触发 IPC handler _h_ppt_generate 渲染 pptx）与 views（「PPT 加工台」工作台，导航动态注册到「工具/工作台」分区）。前端补全 structure 后经 IPC 落盘，返回 {ok, path, pages}。",
+  "category": "tool",
+  "tags": [
+    "ppt",
+    "pptx",
+    "office",
+    "brick",
+    "tool"
+  ],
+  "license": "MIT",
+  "source": "local",
+  "capabilities": [
+    "ui.ppt-studio",
+    "ui.buttons",
+    "ui.views",
+    "ppt.generate"
+  ],
+  "dependencies": [
+    "python-pptx"
+  ],
+  "resources": {
+    "memory_mb": 64,
+    "disk_mb": 32,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [
+      "ppt_brick"
+    ],
+    "conflicts_with": [],
+    "memory_scope": [
+      "session"
+    ]
+  },
+  "buttons": [
+    {
+      "label": "生成 PPT",
+      "action": "ppt_generate",
+      "args": {
+        "skill": "ppt-studio",
+        "structure": {
+          "brand_color": "#1D4ED8",
+          "title": "示例项目汇报",
+          "subtitle": "本地渲染 · 零 LLM token",
+          "author": "Shadeling",
+          "date": "2026-08-27",
+          "toc_items": ["项目背景", "方案设计", "实施计划"],
+          "sections": [
+            {
+              "title": "项目背景",
+              "subtitle": "章节副标题",
+              "bullets": ["背景要点一", "背景要点二"]
+            },
+            {
+              "title": "方案设计",
+              "subtitle": "技术路线",
+              "bullets": ["方案要点一", "方案要点二"]
+            },
+            {
+              "title": "实施计划",
+              "subtitle": "里程碑",
+              "bullets": ["计划要点一", "计划要点二"]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "views": [
+    {
+      "nav_title": "PPT 加工台",
+      "view_id": "ppt_studio",
+      "handler": "ppt_open_studio",
+      "icon": "📽️"
+    }
+  ]
+}

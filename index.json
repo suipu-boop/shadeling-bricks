@@ -160,6 +160,22 @@
       "risk_level": "low",
       "summary": "向用户问好并返回当前时间（纯 Python 标准库，零依赖）。",
       "path": "bricks/hello-marvis/"
+    },
+    {
+      "name": "demo-studio",
+      "version": "0.1.0",
+      "category": "tool",
+      "risk_level": "low",
+      "summary": "Step1 最小演示积木（纯验证物）：触发按钮卡片 + 「工具/工作台」动态分区入口，验证积木自带 UI 平台能力链路。",
+      "path": "bricks/demo-studio/"
+    },
+    {
+      "name": "ppt-studio",
+      "version": "0.1.0",
+      "category": "tool",
+      "risk_level": "low",
+      "summary": "PPT 生成积木：把一段中文 structure（标题/副标题/作者/日期/章节/要点）渲染成真实 .pptx 文件，输出到运行实例 home/output_pptx/。基于本地 ppt_brick 渲染底座（theme 派生 token + registry 版式 + generator 编排），零 LLM token、离线可用。",
+      "path": "bricks/ppt-studio/"
     }
   ],
   "updated_at": "2026-08-22"

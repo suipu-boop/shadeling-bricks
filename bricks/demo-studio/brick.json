@@ -1,0 +1,60 @@
+{
+  "name": "demo-studio",
+  "trigger": [
+    "演示",
+    "demo",
+    "demo-studio"
+  ],
+  "summary": "Step1 最小演示积木（纯验证物）：触发按钮卡片 + 「工具/工作台」动态分区入口，验证积木自带 UI 平台能力链路。",
+  "version": "0.1.0",
+  "author": "Shadeling",
+  "description": "平台 UI 能力验证积木。不携带业务逻辑，仅声明 buttons（触发演示按钮，走受控前缀 demo_）与 views（演示工作台视图，导航动态注册到「工具/工作台」分区）。用于实测：聊天区按钮卡片渲染、点击触发 IPC 回显、导航分区动态出现/消失。",
+  "category": "tool",
+  "tags": [
+    "demo",
+    "ui",
+    "test",
+    "tool",
+    "brick"
+  ],
+  "license": "MIT",
+  "source": "local",
+  "capabilities": [
+    "ui.demo-studio",
+    "ui.buttons",
+    "ui.views"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 1,
+    "disk_mb": 1,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "session"
+    ]
+  },
+  "buttons": [
+    {
+      "label": "触发演示",
+      "action": "demo_button",
+      "args": {
+        "kind": "echo",
+        "skill": "demo-studio"
+      }
+    }
+  ],
+  "views": [
+    {
+      "nav_title": "演示工作台",
+      "view_id": "demo_studio",
+      "handler": "demo_view",
+      "icon": "🧪"
+    }
+  ]
+}
