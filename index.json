@@ -162,14 +162,6 @@
       "path": "bricks/hello-marvis/"
     },
     {
-      "name": "demo-studio",
-      "version": "0.1.0",
-      "category": "tool",
-      "risk_level": "low",
-      "summary": "Step1 最小演示积木（纯验证物）：触发按钮卡片 + 「工具/工作台」动态分区入口，验证积木自带 UI 平台能力链路。",
-      "path": "bricks/demo-studio/"
-    },
-    {
       "name": "ppt-studio",
       "version": "0.1.0",
       "category": "tool",
@@ -178,5 +170,5 @@
       "path": "bricks/ppt-studio/"
     }
   ],
-  "updated_at": "2026-08-22"
+  "updated_at": "2026-08-29T22:08:14"
 }

@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 1ff3ab34626ddcd667748776b4e29487_6b8c39afa39411f1abe1525400e6dd8f
+    ReservedCode1: 10IsWg+OfbW+qGzpCiXumOmvwfVOn6XV9VdZZT9NDB1XhhZa0y1Yj2JYtwieO8FhF+90xaWzOlcLK/CsvmSoyggFSA3t6fyqeB21N5iWqR4NkpRdhIydeEB4gO25BW+R3zbze6hALU33/iberOIXdPJCIFt3LjBB5cHaVzo/qZdam2FEHkb+NrqZZGM=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 1ff3ab34626ddcd667748776b4e29487_6b8c39afa39411f1abe1525400e6dd8f
+    ReservedCode2: 10IsWg+OfbW+qGzpCiXumOmvwfVOn6XV9VdZZT9NDB1XhhZa0y1Yj2JYtwieO8FhF+90xaWzOlcLK/CsvmSoyggFSA3t6fyqeB21N5iWqR4NkpRdhIydeEB4gO25BW+R3zbze6hALU33/iberOIXdPJCIFt3LjBB5cHaVzo/qZdam2FEHkb+NrqZZGM=
+---
+
 # brick-vault 冻结说明（FROZEN）
 
 > 依据：`brickery/specs/m1-product-line-slim.md` 第三节冻结清单（M1 产品线瘦身，2026-08-29 拍板执行）
@@ -24,3 +35,4 @@
 1. 冻结归档目录不得继续提交功能变更；如确需修改，须先在 specs 解冻并登记。
 2. M3 底座原生实现完成前，冻结目录保留原样，供历史引用与迁移参考。
 3. 本文件与 `skills/`（技能源）无关；技能目录以各自 index.json 为准。
+*（内容由AI生成，仅供参考）*
