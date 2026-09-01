@@ -27,7 +27,11 @@
     "ppt.generate"
   ],
   "dependencies": [
-    "python-pptx"
+    {
+      "name": "python-pptx",
+      "type": "python",
+      "version": "*"
+    }
   ],
   "resources": {
     "memory_mb": 64,
@@ -37,9 +41,7 @@
   },
   "risk_level": "low",
   "composition": {
-    "requires": [
-      "ppt_brick"
-    ],
+    "requires": [],
     "conflicts_with": [],
     "memory_scope": [
       "session"

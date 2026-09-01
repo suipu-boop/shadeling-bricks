@@ -2,20 +2,12 @@
   "schema": "brick-registry/v1",
   "bricks": [
     {
-      "name": "feishu",
-      "version": "1.0.0",
-      "category": "connector",
-      "risk_level": "medium",
-      "summary": "手机飞书 ↔ 本地 Shadeling 的文本桥：WebSocket 长连接、白名单鉴权、默认关闭。",
-      "path": "bricks/feishu/"
-    },
-    {
-      "name": "browser",
-      "version": "1.0.0",
-      "category": "内置",
-      "risk_level": "high",
-      "summary": "对接腾讯开源 BrowserSkill（bsk CLI），操作真实已登录浏览器：复用登录态、Agent Window 隔离、Human-in-loop。适合内网/SaaS 后台、填表、抓数据、遇验证码交人。",
-      "path": "bricks/browser/"
+      "name": "agent-mail",
+      "version": "0.1.0",
+      "category": "service",
+      "risk_level": "low",
+      "summary": "agent 间邮件式异步通信：地址身份 + 信封消息 + 收件箱 + 小群体群组地址",
+      "path": "bricks/agent-mail/"
     },
     {
       "name": "ax",
@@ -26,20 +18,20 @@
       "path": "bricks/ax/"
     },
     {
-      "name": "visualize",
+      "name": "backup-restore",
       "version": "1.0.0",
       "category": "内置",
-      "risk_level": "low",
-      "summary": "在对话中生成内联解释图（流程 / 对比 / 架构 / 矩阵 / 时间线 / 甘特图），聊天界面自动渲染。",
-      "path": "bricks/visualize/"
+      "risk_level": "medium",
+      "summary": "傻瓜式备份/恢复：一键备份、指定备份、恢复、查看备份列表。",
+      "path": "bricks/backup-restore/"
     },
     {
-      "name": "docwrite",
+      "name": "browser",
       "version": "1.0.0",
-      "category": "tool",
-      "risk_level": "low",
-      "summary": "生成 docx / xlsx / pptx 文档（纯 stdlib 拼装，零 LLM token）。",
-      "path": "bricks/docwrite/"
+      "category": "内置",
+      "risk_level": "high",
+      "summary": "对接腾讯开源 BrowserSkill（bsk CLI），操作真实已登录浏览器：复用登录态、Agent Window 隔离、Human-in-loop。适合内网/SaaS 后台、填表、抓数据、遇验证码交人。",
+      "path": "bricks/browser/"
     },
     {
       "name": "code-quality-chain",
@@ -50,100 +42,12 @@
       "path": "bricks/code-quality-chain/"
     },
     {
-      "name": "high-config-doc",
-      "version": "1.0.0",
-      "category": "binary",
-      "risk_level": "medium",
-      "summary": "用 DocWritePro 工具生成带复杂排版的 docx/xlsx/pptx（基于 editor_sdk 原生引擎），支持 commands 命令驱动模式（染色表格/图表/页眉页码/形状/主题配色）。",
-      "path": "bricks/high-config-doc/"
-    },
-    {
-      "name": "meeting-minutes",
-      "version": "1.1.0",
-      "category": "内置",
+      "name": "demo-studio",
+      "version": "0.1.0",
+      "category": "tool",
       "risk_level": "low",
-      "summary": "把对话/录音整理成待办+决议的会议纪要",
-      "path": "bricks/meeting-minutes/"
-    },
-    {
-      "name": "engine-local",
-      "version": "1.0.0",
-      "category": "engine",
-      "risk_level": "low",
-      "summary": "本地 GGUF 推理后端（llama_cpp + Metal），推理不出本机，隐私优先。",
-      "path": "bricks/engine-local/"
-    },
-    {
-      "name": "engine-api",
-      "version": "1.0.0",
-      "category": "engine",
-      "risk_level": "medium",
-      "summary": "OpenAI 兼容网络推理端点模板，api_url / api_key 由用户显式填写。",
-      "path": "bricks/engine-api/"
-    },
-    {
-      "name": "vault",
-      "version": "1.0.0",
-      "category": "service",
-      "risk_level": "low",
-      "summary": "本地资产中枢：文档/网页/笔记/图片/技能快照的增删查、检索、提醒、扫描。",
-      "path": "bricks/vault/"
-    },
-    {
-      "name": "backup-restore",
-      "version": "1.0.0",
-      "category": "内置",
-      "risk_level": "medium",
-      "summary": "傻瓜式备份/恢复：一键备份、指定备份、恢复、查看备份列表。",
-      "path": "bricks/backup-restore/"
-    },
-    {
-      "name": "telegram",
-      "version": "1.0.0",
-      "category": "connector",
-      "risk_level": "medium",
-      "summary": "手机 Telegram ↔ 本地 Shadeling 的文本桥：bot 出站建连、白名单鉴权、默认关闭。",
-      "path": "bricks/telegram/"
-    },
-    {
-      "name": "multi-agent",
-      "version": "1.0.0",
-      "category": "内置",
-      "risk_level": "low",
-      "summary": "多 agent 编排：派生子任务（SpawnAgent）、等待结果（WaitTask）、任务列表、取消任务。",
-      "path": "bricks/multi-agent/"
-    },
-    {
-      "name": "scheduler",
-      "version": "1.0.0",
-      "category": "内置",
-      "risk_level": "low",
-      "summary": "后台异步任务管理：提交任务、任务列表、任务详情、取消任务。",
-      "path": "bricks/scheduler/"
-    },
-    {
-      "name": "rules",
-      "version": "1.0.0",
-      "category": "内置",
-      "risk_level": "low",
-      "summary": "持久规则注入：查看/新增/删除/重载 rules.json 与 SHADERULES.md，注入 system prompt。",
-      "path": "bricks/rules/"
-    },
-    {
-      "name": "mcp",
-      "version": "1.0.0",
-      "category": "内置",
-      "risk_level": "low",
-      "summary": "MCP 接入：列出已接入 MCP 工具与错误诊断。",
-      "path": "bricks/mcp/"
-    },
-    {
-      "name": "skill-library",
-      "version": "1.0.0",
-      "category": "内置",
-      "risk_level": "medium",
-      "summary": "技能市场：技能列表、安装、卸载、升级、评审。",
-      "path": "bricks/skill-library/"
+      "summary": "Step1 最小演示积木（纯验证物）：触发按钮卡片 + 「工具/工作台」动态分区入口，验证积木自带 UI 平台能力链路。",
+      "path": "bricks/demo-studio/"
     },
     {
       "name": "doctor",
@@ -154,12 +58,76 @@
       "path": "bricks/doctor/"
     },
     {
+      "name": "docwrite",
+      "version": "1.0.0",
+      "category": "tool",
+      "risk_level": "low",
+      "summary": "生成 docx / xlsx / pptx 文档（纯 stdlib 拼装，零 LLM token）。",
+      "path": "bricks/docwrite/"
+    },
+    {
+      "name": "engine-api",
+      "version": "1.0.0",
+      "category": "engine",
+      "risk_level": "medium",
+      "summary": "OpenAI 兼容网络推理端点模板，api_url / api_key 由用户显式填写。",
+      "path": "bricks/engine-api/"
+    },
+    {
+      "name": "engine-local",
+      "version": "1.0.0",
+      "category": "engine",
+      "risk_level": "low",
+      "summary": "本地 GGUF 推理后端（llama_cpp + Metal），推理不出本机，隐私优先。",
+      "path": "bricks/engine-local/"
+    },
+    {
+      "name": "feishu",
+      "version": "1.0.0",
+      "category": "connector",
+      "risk_level": "medium",
+      "summary": "手机飞书 ↔ 本地 Shadeling 的文本桥：WebSocket 长连接、白名单鉴权、默认关闭。",
+      "path": "bricks/feishu/"
+    },
+    {
       "name": "hello-marvis",
       "version": "1.0.0",
       "category": "tool",
       "risk_level": "low",
       "summary": "向用户问好并返回当前时间（纯 Python 标准库，零依赖）。",
       "path": "bricks/hello-marvis/"
+    },
+    {
+      "name": "high-config-doc",
+      "version": "1.0.0",
+      "category": "binary",
+      "risk_level": "medium",
+      "summary": "用 DocWritePro 工具生成带复杂排版的 docx/xlsx/pptx（基于 editor_sdk 原生引擎），支持 commands 命令驱动模式（染色表格/图表/页眉页码/形状/主题配色）。",
+      "path": "bricks/high-config-doc/"
+    },
+    {
+      "name": "mcp",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "low",
+      "summary": "MCP 接入：列出已接入 MCP 工具与错误诊断。",
+      "path": "bricks/mcp/"
+    },
+    {
+      "name": "meeting-minutes",
+      "version": "1.1.0",
+      "category": "内置",
+      "risk_level": "low",
+      "summary": "把对话/录音整理成待办+决议的会议纪要",
+      "path": "bricks/meeting-minutes/"
+    },
+    {
+      "name": "multi-agent",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "low",
+      "summary": "多 agent 编排：派生子任务（SpawnAgent）、等待结果（WaitTask）、任务列表、取消任务。",
+      "path": "bricks/multi-agent/"
     },
     {
       "name": "ppt-studio",
@@ -170,13 +138,53 @@
       "path": "bricks/ppt-studio/"
     },
     {
-      "name": "agent-mail",
-      "version": "0.1.0",
+      "name": "rules",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "low",
+      "summary": "持久规则注入：查看/新增/删除/重载 rules.json 与 SHADERULES.md，注入 system prompt。",
+      "path": "bricks/rules/"
+    },
+    {
+      "name": "scheduler",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "low",
+      "summary": "后台异步任务管理：提交任务、任务列表、任务详情、取消任务。",
+      "path": "bricks/scheduler/"
+    },
+    {
+      "name": "skill-library",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "medium",
+      "summary": "技能市场：技能列表、安装、卸载、升级、评审。",
+      "path": "bricks/skill-library/"
+    },
+    {
+      "name": "telegram",
+      "version": "1.0.0",
+      "category": "connector",
+      "risk_level": "medium",
+      "summary": "手机 Telegram ↔ 本地 Shadeling 的文本桥：bot 出站建连、白名单鉴权、默认关闭。",
+      "path": "bricks/telegram/"
+    },
+    {
+      "name": "vault",
+      "version": "1.0.0",
       "category": "service",
       "risk_level": "low",
-      "summary": "agent 间邮件式异步通信：地址身份 + 信封消息 + 收件箱 + 小群体群组地址",
-      "path": "bricks/agent-mail/"
+      "summary": "本地资产中枢：文档/网页/笔记/图片/技能快照的增删查、检索、提醒、扫描。",
+      "path": "bricks/vault/"
+    },
+    {
+      "name": "visualize",
+      "version": "1.0.0",
+      "category": "内置",
+      "risk_level": "low",
+      "summary": "在对话中生成内联解释图（流程 / 对比 / 架构 / 矩阵 / 时间线 / 甘特图），聊天界面自动渲染。",
+      "path": "bricks/visualize/"
     }
   ],
-  "updated_at": "2026-09-01T08:55:29"
+  "updated_at": "2026-09-01T09:13:36"
 }
