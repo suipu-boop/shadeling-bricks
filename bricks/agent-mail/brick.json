@@ -13,7 +13,7 @@
     "group"
   ],
   "license": "MIT",
-  "source": "builtin",
+  "source": "github.com/suipu-boop/shadeling-bricks",
   "capabilities": [
     "mail.send",
     "mail.receive",
