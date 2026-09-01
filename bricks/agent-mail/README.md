@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 1ff3ab34626ddcd667748776b4e29487_e759e9e6a5a011f1a0d9525400826444
+    ReservedCode1: iRGfYwmyQNycfZVEAYSGmtCTBtRnrgu1xTsuNnfIB6FSuURJP59QDYXOp01Q9lImcORbO+TMfAk8kkfCzFXpglHTU2zUF/oYpofFZrVxiHQZhyXGCXY5YVKnv7MSwvRuLKaExiQQ371I4A51ey7tE9ViG9o4VhVYD9cs/udQfyceqzuMGZpOXG40GTY=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 1ff3ab34626ddcd667748776b4e29487_e759e9e6a5a011f1a0d9525400826444
+    ReservedCode2: iRGfYwmyQNycfZVEAYSGmtCTBtRnrgu1xTsuNnfIB6FSuURJP59QDYXOp01Q9lImcORbO+TMfAk8kkfCzFXpglHTU2zUF/oYpofFZrVxiHQZhyXGCXY5YVKnv7MSwvRuLKaExiQQ371I4A51ey7tE9ViG9o4VhVYD9cs/udQfyceqzuMGZpOXG40GTY=
+---
+
 # agent-mail
 
 agent 间邮件式异步通信积木（M6 P0 单机版）。
@@ -72,3 +83,4 @@ delivery_log.jsonl  # 投递日志
 python3 scripts/verify_bricks.py agent-mail
 cd ~/Dev/Shadeling && python3 -m unittest runtime.tests.test_ipc -v
 ```
+*（内容由AI生成，仅供参考）*
