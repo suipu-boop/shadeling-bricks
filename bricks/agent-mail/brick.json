@@ -1,0 +1,91 @@
+{
+  "name": "agent-mail",
+  "summary": "agent 间邮件式异步通信：地址身份 + 信封消息 + 收件箱 + 小群体群组地址",
+  "version": "0.1.0",
+  "author": "Shadeling",
+  "description": "本地 agent 邮件积木（ConnectorBrick 服务型）。常驻投递服务维护地址簿/群组路由与持久化收件箱（JSON Lines ~/.brickery/mail/）；经 IPC（127.0.0.1）调用内核 _h_mail_send/_h_mail_inbox/_h_mail_list/_h_mail_group/_h_mail_address 完成收发与通讯录管理，零外部网络。支持 L1-L4 自主层级判定（来信处理自主度，设置区配置）与单日 50 次自主执行上限护栏；enabled=false 默认不拉起常驻线程，但仍可通过 IPC handler 使用（宿主 skills.py/skill_library.py 尚不消费 buttons，按钮语义经 handler + 聊天触发可用）。",
+  "category": "service",
+  "tags": [
+    "agent-mail",
+    "connector",
+    "async",
+    "mail",
+    "group"
+  ],
+  "license": "MIT",
+  "source": "builtin",
+  "capabilities": [
+    "mail.send",
+    "mail.receive",
+    "mail.inbox",
+    "mail.group",
+    "mail.route"
+  ],
+  "dependencies": [],
+  "resources": {
+    "memory_mb": 32,
+    "disk_mb": 5,
+    "network": false,
+    "ports": []
+  },
+  "risk_level": "low",
+  "composition": {
+    "requires": [],
+    "conflicts_with": [],
+    "memory_scope": [
+      "workspace",
+      "longterm"
+    ]
+  },
+  "content": "你是 Shadeling 的 agent 邮件助手。用户需要给其他 agent 发信、查收件箱或管理群组地址时，经 IPC 调用内核 handler：mail_send(to, subject, body) 发送信封消息；mail_inbox() 读取收件箱；mail_list() 列出地址/群组/统计；mail_group(name, members) 管理小群体群组地址；mail_address(handle, display_name) 维护地址簿。投递为异步持久化队列，发送后对方 agent 在收件箱可读。",
+  "buttons": [
+    {
+      "id": "mail_send",
+      "label": "发送邮件",
+      "handler": "mail_send",
+      "params": {
+        "to": "",
+        "subject": "",
+        "body": ""
+      },
+      "risk": "low"
+    },
+    {
+      "id": "mail_inbox",
+      "label": "收件箱",
+      "handler": "mail_inbox",
+      "params": {},
+      "risk": "low"
+    },
+    {
+      "id": "mail_list",
+      "label": "地址簿",
+      "handler": "mail_list",
+      "params": {},
+      "risk": "low"
+    },
+    {
+      "id": "mail_group",
+      "label": "管理群组",
+      "handler": "mail_group",
+      "params": {
+        "name": "",
+        "members": ""
+      },
+      "risk": "low"
+    }
+  ],
+  "views": [
+    {
+      "view_id": "agent_mail",
+      "title": "Agent 邮件",
+      "icon": "envelope.fill"
+    }
+  ],
+  "files": [
+    {
+      "src": "agent_mail.py",
+      "dest": "runtime/connectors/agent_mail.py"
+    }
+  ]
+}
