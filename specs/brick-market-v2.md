@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 1ff3ab34626ddcd667748776b4e29487_f5487cc6a93311f1aed8525400dcc5b3
+    ReservedCode1: kHbkzS3Dk/LfVSdqWNjw0yiYLXHX8j2D9hBi/KEZSUbLg96JF7yjeRsIzRh1vim11fEQJTlzhxoJNLCFSt2lMHHvYDBDweubH4wMCRvGjKUsCS7pXHCwQS6VbHhObxL/StHQxBH2wgtATHGNQ0ce8c3wljAZCjLV2i58Dl/Bd1cWiBygmYzjwBD3Djo=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 1ff3ab34626ddcd667748776b4e29487_f5487cc6a93311f1aed8525400dcc5b3
+    ReservedCode2: kHbkzS3Dk/LfVSdqWNjw0yiYLXHX8j2D9hBi/KEZSUbLg96JF7yjeRsIzRh1vim11fEQJTlzhxoJNLCFSt2lMHHvYDBDweubH4wMCRvGjKUsCS7pXHCwQS6VbHhObxL/StHQxBH2wgtATHGNQ0ce8c3wljAZCjLV2i58Dl/Bd1cWiBygmYzjwBD3Djo=
+---
+
 # Shadeling 积木市场 V2：独立积木包 + 真实下载安装
 
 > 状态：**已拍板，实施中**（2026-09-05）
@@ -128,3 +139,4 @@ V2 index.json：
 1. 现有四只原生积木（vault / cabinet / ppt-studio / agent-mail）是否拆为独立小程序包、从底座移出（出厂 app 零积木），还是保留内置只作首期示范？——用户此前倾向"内置也逐步拆出"，待最终确认。
 2. 第一只端到端示范积木选哪只（建议选 vault 或做一个新轻量积木跑通下载-安装-打开-卸载全链路）。
 3. 产品积木包构建方式：本地 Xcode 工程 + 发布脚本产出 zip（不引入 CI，先手动发布）。
+*（内容由AI生成，仅供参考）*
