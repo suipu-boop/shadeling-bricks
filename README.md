@@ -13,7 +13,7 @@
 ```
 brick-vault/
 ├── bricks/          # 每个积木一个子目录
-│   ├── feishu/      # 连接器积木（P1）
+│   ├── agent-mail/  # 连接器积木（P1）
 │   │   ├── brick.json
 │   │   └── ...
 │   └── ...
