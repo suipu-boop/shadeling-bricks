@@ -22,7 +22,7 @@ AIGC:
 | 保留活跃 | ppt-studio、vault | 原生 UI 积木，M4 原生重写 |
 | 工具层保留 | docwrite | 进底座工具层（支撑 PPT 链路） |
 | 冻结保留（不删） | high-config-doc、demo-studio | 内核实现保留；demo-studio 仅开发期验证工具 |
-| 冻结归档（17 个） | ax / backup-restore / browser / code-quality-chain / doctor / engine-api / engine-local / feishu / hello-marvis / mcp / meeting-minutes / multi-agent / rules / scheduler / skill-library / telegram / visualize | 收进底座原生实现（M3 一次全收），vault 目录冻结不再维护 |
+| 冻结归档（17 个） | ax / backup-restore / browser / code-quality-chain / doctor / engine-api / engine-local / feishu / hello-marvis / mcp / meeting-minutes / multi-agent / rules / scheduler / skill-library / telegram / visualize | ~~收进底座原生实现（M3 一次全收），vault 目录冻结不再维护~~ **已于 2026-09-15 解冻删除（见下节）** |
 
 ## 活跃清单（仅 3 个）
 
@@ -30,9 +30,18 @@ AIGC:
 - `bricks/vault` — 保留活跃
 - `bricks/docwrite` — 工具层保留
 
+## 解冻删除登记（2026-09-15）
+
+- **依据**：17 个冻结归档积木功能已由 Shadeling 底座原生覆盖（runtime/ipc.py handler、builtin_skills ax/browser/visualize、connectors feishu/telegram/agent_mail、原生 View），且仓内/跨仓无运行时硬依赖。
+- **范围**：`bricks/` 下 ax、backup-restore、browser、code-quality-chain、doctor、engine-api、engine-local、feishu、hello-marvis、mcp、meeting-minutes、multi-agent、rules、scheduler、skill-library、telegram、visualize 共 17 个冻结归档目录解冻并删除。
+- **登记文档**：`specs/UNFREEZE-DELETE-2026-09-15.md`。
+- **保留不动**：ppt-studio、vault、docwrite、high-config-doc、demo-studio 冻结条目维持原样。
+- **契约更新**：本次解冻删除已同步 `index.json`（移除 17 条登记）。
+
 ## 维护约定
 
 1. 冻结归档目录不得继续提交功能变更；如确需修改，须先在 specs 解冻并登记。
 2. M3 底座原生实现完成前，冻结目录保留原样，供历史引用与迁移参考。
 3. 本文件与 `skills/`（技能源）无关；技能目录以各自 index.json 为准。
+4. 已解冻删除目录（见上节登记）不再视为本文件约束范围，历史冻结清单仅作归档记录。
 *（内容由AI生成，仅供参考）*

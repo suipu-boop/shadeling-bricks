@@ -73,7 +73,7 @@ brick-vault/                        # 本仓库（积木加工厂）
 |------|----------|--------------|
 | 引擎配置模型 | `brickery/runtime/config.py::EngineConfig`（api_url / api_key / api_model，仅显式填写时非空） | 直接复用，工厂后端读同一配置 |
 | API 引擎 | `engine_providers.py` ApiEngine（OpenAI 兼容 /chat/completions） | 复用 EngineProviderRegistry 构建 |
-| 引擎积木 | `bricks/engine-api`（engine_kind=api，不携带端点/密钥） | 工厂 app 装配时挂 engine-api 积木 |
+| 引擎配置 | 底座内置 `engine_providers.py` ApiEngine（engine_kind=api，不携带端点/密钥；原 `bricks/engine-api` 已解冻删除） | 工厂 app 装配时直接复用底座 ApiEngine |
 | 未配置即不可用 | api_url/api_key 未填 → is_available=False | 对话前检测，未配置则引导去设置页填写 |
 | 安全红线 | 端点/密钥由用户显式填写，key 存 `~/.brickery/config/`，不进 git、不进记忆库；前端掩码显示、空 key 不覆盖已存值 | 完全沿用 |
 
