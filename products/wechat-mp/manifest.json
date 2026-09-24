@@ -1,0 +1,19 @@
+{
+  "schema": "brick-app/v1",
+  "id": "com.shadeling.brick.wechat-mp",
+  "name": "wechat-mp",
+  "title": "微信公众号",
+  "version": "1.0.0",
+  "author": "Shadeling",
+  "summary": "微信公众号运营助手：Markdown 排版、永久素材上传、草稿管理与发布。",
+  "kind": "product",
+  "bundle": "WeChatMP.app",
+  "icon": "icon.png",
+  "min_os": "15.0",
+  "permissions": [
+    "network"
+  ],
+  "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/wechat-mp/releases/1.0.0/wechat-mp-1.0.0.zip",
+  "sha256": "21e264c241072846061c1cbfa877e8e7228a0795aaf55dd3d73a0b45d547fe03",
+  "release_notes": ""
+}

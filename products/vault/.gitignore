@@ -1,0 +1,11 @@
+# SwiftPM 构建缓存与打包中间产物，禁止入库
+.build/
+dist/
+
+# macOS
+.DS_Store
+
+# 本机私有数据（正常不会出现在仓库内，兜底忽略）
+vault.db
+.vault_key
+*.vault_key
