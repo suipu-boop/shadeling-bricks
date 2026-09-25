@@ -40,17 +40,9 @@
       "risk_level": "low",
       "summary": "PPT 生成积木：把一段中文 structure（标题/副标题/作者/日期/章节/要点）渲染成真实 .pptx 文件，输出到运行实例 home/output_pptx/。基于本地 ppt_brick 渲染底座（theme 派生 token + registry 版式 + generator 编排），零 LLM token、离线可用。",
       "path": "bricks/ppt-studio/"
-    },
-    {
-      "name": "vault",
-      "version": "1.0.0",
-      "category": "service",
-      "risk_level": "low",
-      "summary": "本地资产中枢：文档/网页/笔记/图片/技能快照的增删查、检索、提醒、扫描。",
-      "path": "bricks/vault/"
     }
   ],
-  "updated_at": "2026-09-25T18:47:04",
+  "updated_at": "2026-09-25T20:46:30",
   "products": [
     {
       "name": "wechat-mp",
