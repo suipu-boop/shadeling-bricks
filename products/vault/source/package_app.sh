@@ -10,11 +10,12 @@
 #   products/vault/releases/<version>/vault-<version>.zip
 #   products/vault/releases/<version>/vault-<version>.zip.sha256
 #
-# 打包完成后，请把 sha256 回填到 manifest.json 的 sha256 字段。
+# 打包完成后由 scripts/pack_product.py finalize 自动回填 sha256（manifest.json + index.json）。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+VAULT_DIR="$(cd "${ROOT_DIR}/../.." && pwd)"
 VERSION="${1:-1.0.0}"
 
 PRODUCT="vault"
@@ -52,19 +53,22 @@ codesign --force --deep --sign - "${APP_DIR}" >/dev/null 2>&1 || {
     echo "[warn] ad-hoc 签名失败，产物仍可用，但首次打开可能需要在「隐私与安全性」中放行。" >&2
 }
 
-echo "==> 4/6 打包 zip"
+echo "==> 4/6 暂存包内 manifest.json"
+# 安装器解压后必须能读到包内 manifest 才能确认身份 / 入口 bundle / 权限声明，缺了直接中止安装
+# （实测：zip 只含 .app 本体时 wechat-mp / vault 两只包都装不上）。
+# 包内 manifest 只带身份字段：sha256 / download_url 是仓库侧发布元数据，且 zip 无法含自身哈希。
+python3 "${VAULT_DIR}/scripts/pack_product.py" stage \
+    --product "${PRODUCT}" --out "${DIST_DIR}/manifest.json"
+
+echo "==> 5/6 打包 zip（.app 本体 + manifest.json）"
 mkdir -p "${RELEASE_DIR}"
 rm -f "${ZIP_PATH}" "${SHA_PATH}"
-# 仅打包 .app 本体，保持解压后根目录直接是 Vault.app
-( cd "${DIST_DIR}" && zip -qry "${ZIP_PATH}" "${BUNDLE_NAME}" )
+( cd "${DIST_DIR}" && zip -qry "${ZIP_PATH}" "${BUNDLE_NAME}" manifest.json )
 
-echo "==> 5/6 计算 sha256"
-SHA="$(shasum -a 256 "${ZIP_PATH}" | awk '{print $1}')"
-printf '%s  %s\n' "${SHA}" "$(basename "${ZIP_PATH}")" > "${SHA_PATH}"
+echo "==> 6/6 算 sha256 + 回填 manifest.json / index.json（含 zip 内容复核）"
+python3 "${VAULT_DIR}/scripts/pack_product.py" finalize \
+    --product "${PRODUCT}" --version "${VERSION}"
 
-echo "==> 6/6 完成"
-echo "zip      : ${ZIP_PATH}"
-echo "sha256   : ${SHA}"
-echo
-echo "下一步：把上面的 sha256 回填到 ${ROOT_DIR}/manifest.json 的 \"sha256\" 字段，"
-echo "       并确认 index.json 的 products[] 中登记值与之逐字一致。"
+echo "==> 完成"
+echo "zip    : ${ZIP_PATH}"
+echo "复核   : cd ${VAULT_DIR} && python3 scripts/verify_products.py ${PRODUCT}"

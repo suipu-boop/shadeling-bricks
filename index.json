@@ -50,21 +50,21 @@
       "path": "bricks/vault/"
     }
   ],
-  "updated_at": "2026-09-24T21:20:00",
+  "updated_at": "2026-09-25T18:47:04",
   "products": [
     {
       "name": "wechat-mp",
       "version": "1.0.0",
       "kind": "product",
       "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/wechat-mp/releases/1.0.0/wechat-mp-1.0.0.zip",
-      "sha256": "21e264c241072846061c1cbfa877e8e7228a0795aaf55dd3d73a0b45d547fe03"
+      "sha256": "1a0fd7637206bd83d90ce7ec9cf61351d10f6da0da9020925efc71e360ec2c80"
     },
     {
       "name": "vault",
       "version": "1.0.0",
       "kind": "product",
       "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/vault/releases/1.0.0/vault-1.0.0.zip",
-      "sha256": "aef60f446ff3b107e61481bf35eb908493010de08567ae6c653cd324084f2ea7"
+      "sha256": "e4a1b7f2542f9ea1a1edd548a426cf3980569ab76fb0e8404dd5c0a1e30499dc"
     }
   ]
 }
