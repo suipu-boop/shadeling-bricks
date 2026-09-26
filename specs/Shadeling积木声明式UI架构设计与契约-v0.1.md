@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 1ff3ab34626ddcd667748776b4e29487_f1946ee4b98c11f18442525400de85a5
+    ReservedCode1: 5+BzPbrJ96BaDPiXaYEUrFfsLQYLZeb9cB9pzdxVfCgunDEDP8Lp+UglGjH+WIgc8XndPpR8ltiTjeeQPwa0Tdntgowdv/VC0tURFtKwgsGEgfdEMppbz5CLIPNSNJkD9D6ejZHDDOFE+MpnOYktZLaKbMDs7BsXuSCw+kHuGDmYM2LGwi6fnjQgluo=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 1ff3ab34626ddcd667748776b4e29487_f1946ee4b98c11f18442525400de85a5
+    ReservedCode2: 5+BzPbrJ96BaDPiXaYEUrFfsLQYLZeb9cB9pzdxVfCgunDEDP8Lp+UglGjH+WIgc8XndPpR8ltiTjeeQPwa0Tdntgowdv/VC0tURFtKwgsGEgfdEMppbz5CLIPNSNJkD9D6ejZHDDOFE+MpnOYktZLaKbMDs7BsXuSCw+kHuGDmYM2LGwi6fnjQgluo=
+---
+
 # Shadeling 积木声明式 UI 架构设计与契约 v0.1
 
 > **状态**：方向已拍板（2026-09-26），契约待评审；实现变更须同步本文。
@@ -1225,3 +1236,4 @@ Content-Length: <字节数>\r\n
 | G3 | 不为迁移而放宽隔离红线（不放行任意脚本 / 远程加载） | 受限节点须单独安全评审，不得以"迁移便利"为由降低标准 |
 | G4 | 上传类写能力按高危处理 | 写操作影响面大于只读抓取，须标红并二次确认 |
 | G5 | 混合形态仅作过渡，设明确终态期限 | 与第六章兼容期上限 2 个小版本一致 |
+*（内容由AI生成，仅供参考）*
