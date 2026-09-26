@@ -1,4 +1,5 @@
 import SwiftUI
+import BrickUIKit
 import LocalAuthentication
 
 /// 资产详情：字段卡片 + AI 摘要 + 敏感字段 Touch ID 解锁 + 删除。
@@ -32,13 +33,11 @@ struct DetailSheet: View {
                 .padding(Design.Spacing.xl)
             }
         }
-        .frame(width: 500, height: 620)
+        .frame(height: 620)   // 宽度由 .brickSheet 统一（规格 v0.1 §1.4）
         .background(Design.appBackgroundGradient)
         .foregroundStyle(.white)
-        .confirmationDialog("删除这条记录？", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("删除", role: .destructive) { doDelete() }
-            Button("取消", role: .cancel) {}
-        }
+        .brickConfirm(title: "删除这条记录？", confirmLabel: "删除",
+                      destructive: true, isPresented: $confirmDelete) { doDelete() }
     }
 
     // MARK: 区块

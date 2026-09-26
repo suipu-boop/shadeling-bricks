@@ -17,7 +17,7 @@ Shadeling 产品型积木（`kind: product`，V2 小程序包）。
 笔记 / 技能快照**的归档、检索、详情查看与证件 OCR 识别，全部本地完成。
 
 - 积木 id：`com.shadeling.brick.vault`
-- 版本：`1.0.0`
+- 版本：`1.1.0`
 - 入口 bundle：`Vault.app`
 - 网络权限：无（`permissions: []`，全本地、不联网）
 
@@ -34,9 +34,9 @@ products/vault/
 ├── README.md                        # 本文件
 ├── .gitignore                       # 忽略 .build/ 构建缓存与打包中间产物
 ├── source/                          # SwiftPM 源码（macOS 14.0+）
-│   ├── Package.swift
+│   ├── Package.swift                # SwiftPM 清单（依赖本地包 BrickUIKit，跨仓相对路径）
 │   ├── Info.plist                   # 打包 .app 用的模板（复制进 .app/Contents/）
-│   ├── package_app.sh               # 构建 → 组装 .app → 打 zip（含 manifest.json）→ 回填 sha256
+│   ├── package_app.sh               # 依赖前置检查 → 构建 → 组装 .app → 打 zip → 回填 sha256
 │   └── Sources/Vault/
 │       ├── VaultApp.swift           # @main 应用入口
 │       ├── ContentView.swift        # 主界面：命令栏 + 类型筛选 + 卡片墙
@@ -45,7 +45,7 @@ products/vault/
 │       ├── VaultModels.swift        # 数据模型（对齐底座 VaultAssetItem / payload 结构）
 │       ├── VaultStore.swift         # SQLite 存储引擎（与 runtime/vault_store.py 同源库）
 │       ├── VaultOCR.swift           # 证件 OCR（Vision + PDFKit，纯本地）
-│       └── DesignTokens.swift       # 视觉令牌（粉紫玻璃风）
+│       └── VaultStyle.swift         # 产品自有玻璃样式（令牌统一来自 BrickUIKit）
 └── releases/
     └── 1.0.0/
         ├── vault-1.0.0.zip
@@ -81,7 +81,10 @@ products/vault/
 
 ## 4. 本地构建与打包
 
-前置：macOS 14.0+、Xcode Command Line Tools（`swift --version` 可用）。
+前置：macOS 14.0+、Xcode Command Line Tools（`swift --version` 可用）；
+**Shadeling 仓需位于 `~/Dev/Shadeling`**——`Package.swift` 以跨仓相对路径引用本地 SPM 包
+`app/packages/BrickUIKit`（积木规范化模板 v0.1 §1.1），`package_app.sh` 首步做存在性检查，
+缺失即 abort（不会打出半成品包）。
 
 ### 4.1 一条命令
 
@@ -92,12 +95,13 @@ bash package_app.sh 1.0.0
 
 脚本会依次完成：
 
+0. 依赖前置检查：`../../../../Shadeling/app/packages/BrickUIKit/Package.swift` 不存在即 abort
 1. `swift build -c release`
 2. 组装 `dist/Vault.app`（`Contents/MacOS/Vault`、`Contents/Info.plist`、`Contents/Resources/icon.png`）
 3. ad-hoc 签名
 4. 暂存包内 `dist/manifest.json`（`scripts/pack_product.py stage`：只带身份字段）
-5. 打包 `releases/1.0.0/vault-1.0.0.zip`（zip 根目录即 `Vault.app` + `manifest.json`）
-6. `scripts/pack_product.py finalize`：计算 sha256 → 写 `vault-1.0.0.zip.sha256` → 自动回填 `manifest.json` 与 `index.json` 的 `products[]` → 复核 zip 内容
+5. 打包 `releases/1.1.0/vault-1.1.0.zip`（zip 根目录即 `Vault.app` + `manifest.json`）
+6. `scripts/pack_product.py finalize`：计算 sha256 → 写 `vault-1.1.0.zip.sha256` → 自动回填 `manifest.json` 与 `index.json` 的 `products[]` → 复核 zip 内容
 
 > **zip 内必须含 `manifest.json`**：安装器解压后要读包内 manifest 才能确认积木身份 / 入口 bundle / 权限声明，缺了会直接中止安装。`verify_products.py` 已把该条做成发布闸门。
 
@@ -111,20 +115,22 @@ cp .build/release/Vault dist/Vault.app/Contents/MacOS/
 cp Info.plist dist/Vault.app/Contents/
 cp ../icon.png dist/Vault.app/Contents/Resources/
 python3 ../../scripts/pack_product.py stage --product vault --out dist/manifest.json
-mkdir -p ../releases/1.0.0
-cd dist && zip -r -X ../../releases/1.0.0/vault-1.0.0.zip Vault.app manifest.json
-cd ../.. && python3 ../../scripts/pack_product.py finalize --product vault --version 1.0.0
+mkdir -p ../releases/1.1.0
+cd dist && zip -r -X ../../releases/1.1.0/vault-1.1.0.zip Vault.app manifest.json
+cd ../.. && python3 ../../scripts/pack_product.py finalize --product vault --version 1.1.0
 ```
 
 ---
 
 ## 5. sha256 回填与包内 manifest（重要）
 
-当前 `manifest.json` 中已回填 `1.0.0` 的实算校验和：
+当前 `manifest.json` 中已回填 `1.1.0` 的实算校验和：
 
 ```json
-"sha256": "e4a1b7f2542f9ea1a1edd548a426cf3980569ab76fb0e8404dd5c0a1e30499dc"
+"sha256": "f25497c9cbd8dde80499ba1f7bf93c39e3f849d8767b62f6552f739a409046cf"
 ```
+
+> 出包前须同步 `manifest.json` 的 `version` 与 `download_url`（`finalize` 会校验两者与出包版本一致，不符即 abort）。
 
 该值（含 `index.json` `products[]` 中的同名条目）由出包脚本自动回填，**不再手工维护**。后续发布新版本时：
 
@@ -161,4 +167,7 @@ cd ../.. && python3 ../../scripts/pack_product.py finalize --product vault --ver
 - [x] `icon.png`
 - [x] `releases/1.0.0/vault-1.0.0.zip`（内含 `manifest.json`）与 sha256 回填（sha256 = `e4a1b7f2542f9ea1a1edd548a426cf3980569ab76fb0e8404dd5c0a1e30499dc`）
 - [x] `index.json` 登记（`products[]` 已追加同名条目）
+- [x] BrickUIKit 本地依赖（积木规范化模板 v0.1 §1.1，跨仓相对路径 + 出包前置检查）
+- [x] Phase 1 试点迁移（规格 v0.1 §3）：`BrickScene` 窗口契约 / `.brickSheet`·`.brickConfirm` 弹层 / 删 `DesignTokens.swift` 改引包内令牌
+- [x] `releases/1.1.0/vault-1.1.0.zip` 与 sha256 回填（sha256 = `f25497c9cbd8dde80499ba1f7bf93c39e3f849d8767b62f6552f739a409046cf`）
 *（内容由AI生成，仅供参考）*

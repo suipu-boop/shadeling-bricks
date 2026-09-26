@@ -3,7 +3,7 @@
   "id": "com.shadeling.brick.vault",
   "name": "vault",
   "title": "本地资产中枢",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Shadeling",
   "summary": "本地资产中枢：证件/图片/网页/笔记/技能快照的本地归档、检索与证件 OCR 识别。",
   "kind": "product",
@@ -11,7 +11,7 @@
   "icon": "icon.png",
   "min_os": "14.0",
   "permissions": [],
-  "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/vault/releases/1.0.0/vault-1.0.0.zip",
-  "sha256": "e4a1b7f2542f9ea1a1edd548a426cf3980569ab76fb0e8404dd5c0a1e30499dc",
-  "release_notes": ""
+  "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/vault/releases/1.1.0/vault-1.1.0.zip",
+  "sha256": "f25497c9cbd8dde80499ba1f7bf93c39e3f849d8767b62f6552f739a409046cf",
+  "release_notes": "迁移到 BrickUIKit 积木规范化模板（Phase 1 试点）：窗口契约 / 弹层 / 设计令牌统一走包内契约。"
 }

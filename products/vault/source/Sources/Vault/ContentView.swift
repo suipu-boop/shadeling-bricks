@@ -1,4 +1,5 @@
 import SwiftUI
+import BrickUIKit
 
 /// 主界面：粉紫玻璃风资产中枢。
 /// 命令栏（搜索 / 手动新增 / 刷新） + 类型筛选 + 卡片墙 + 详情/录入弹层。
@@ -32,17 +33,19 @@ struct ContentView: View {
                 }
                 .scrollIndicators(.hidden)
             }
-            .background(Design.glassFill.opacity(0.55))
+            .background(VaultGlass.fill.opacity(0.55))
         }
         .foregroundStyle(.white)
         .task { store.reload() }
         .onChange(of: searchText) { _, _ in applyQuery() }
         .onChange(of: filter) { _, _ in applyQuery() }
-        .sheet(isPresented: $showManualAdd) {
+        .brickSheet(isPresented: $showManualAdd) {
             ManualAddSheet(store: store) { store.reload() }
         }
-        .sheet(item: $selected) { asset in
-            DetailSheet(store: store, asset: asset) { store.reload() }
+        .brickSheet(isPresented: detailPresented) {
+            if let asset = selected {
+                DetailSheet(store: store, asset: asset) { store.reload() }
+            }
         }
     }
 
@@ -50,6 +53,11 @@ struct ContentView: View {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let type = (filter == "ai" || filter == nil) ? nil : filter
         store.reload(type: type, q: q.isEmpty ? nil : q)
+    }
+
+    /// `.brickSheet` 只提供 `isPresented` 形态，详情弹层由可选值派生绑定（规格 v0.1 §1.4）。
+    private var detailPresented: Binding<Bool> {
+        Binding(get: { selected != nil }, set: { if !$0 { selected = nil } })
     }
 
     // MARK: 命令栏
@@ -196,11 +204,11 @@ struct AssetCard: View {
         .frame(minHeight: 96, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: Design.radiusLg, style: .continuous)
-                .fill(hovered ? Design.glassFillStrong : Design.glassFill)
+                .fill(hovered ? VaultGlass.fillStrong : VaultGlass.fill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: Design.radiusLg, style: .continuous)
-                .stroke(hovered ? Design.glassStrokeHover : Design.glassStroke, lineWidth: 1)
+                .stroke(hovered ? VaultGlass.strokeHover : VaultGlass.stroke, lineWidth: 1)
         )
         .animation(.easeOut(duration: 0.15), value: hovered)
     }

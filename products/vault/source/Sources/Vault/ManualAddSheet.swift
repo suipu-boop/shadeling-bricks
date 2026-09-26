@@ -1,4 +1,5 @@
 import SwiftUI
+import BrickUIKit
 import LocalAuthentication
 
 /// 手动录入渠道：按类型动态表单，敏感字段加密入库。
@@ -22,7 +23,7 @@ struct ManualAddSheet: View {
             Divider().overlay(Color.white.opacity(0.1))
             footer
         }
-        .frame(width: 460, height: 560)
+        .frame(height: 560)   // 宽度由 .brickSheet 统一（规格 v0.1 §1.4）
         .background(Design.appBackgroundGradient)
         .foregroundStyle(.white)
     }
