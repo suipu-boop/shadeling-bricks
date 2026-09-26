@@ -3,7 +3,7 @@
   "id": "com.shadeling.brick.wechat-mp",
   "name": "wechat-mp",
   "title": "微信公众号",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Shadeling",
   "summary": "微信公众号运营助手：Markdown 排版、永久素材上传、草稿管理与发布。",
   "kind": "product",
@@ -13,7 +13,7 @@
   "permissions": [
     "network"
   ],
-  "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/wechat-mp/releases/1.0.0/wechat-mp-1.0.0.zip",
-  "sha256": "1a0fd7637206bd83d90ce7ec9cf61351d10f6da0da9020925efc71e360ec2c80",
-  "release_notes": ""
+  "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/wechat-mp/releases/1.1.0/wechat-mp-1.1.0.zip",
+  "sha256": "0a5d4d20aec5c523f62d061c9908b67dd4122dbedc6563ad9074fe2d1b606918",
+  "release_notes": "迁移到 BrickUIKit 积木规范化模板（Phase 2）：窗口契约统一为 980×680 / 最小 760×520，破坏性确认改用 brickConfirm。"
 }

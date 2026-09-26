@@ -1,4 +1,5 @@
 import SwiftUI
+import BrickUIKit
 
 /// 应用入口。
 ///
@@ -9,15 +10,16 @@ import SwiftUI
 struct WeChatMPApp: App {
     @StateObject private var state = AppState()
 
+    /// 窗口契约（规格 v0.1 §1.3）：hiddenTitleBar / 默认 980×680 / 最小 760×520 /
+    /// 单 WindowGroup 且禁用 Cmd+N / 关最后一个窗口即退出进程 —— 全部由 BrickScene 承载
+    ///（迁移前为 1120×720 无 defaultSize + 系统标题栏）。
     var body: some Scene {
-        WindowGroup("微信公众号") {
+        BrickScene(title: "微信公众号") {
             RootView()
                 .environmentObject(state)
-                .frame(minWidth: 1120, minHeight: 720)
         }
-        .windowResizability(.contentMinSize)
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            // 业务专属快捷键（规格 v0.1 §1.5 属"必须自由"）：Cmd+R 刷新草稿列表。
             CommandGroup(after: .toolbar) {
                 Button("刷新草稿列表") {
                     Task { await state.refreshDrafts() }

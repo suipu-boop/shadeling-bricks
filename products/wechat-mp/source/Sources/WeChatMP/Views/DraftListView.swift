@@ -1,4 +1,5 @@
 import SwiftUI
+import BrickUIKit
 
 /// 草稿页：列表 / 刷新 / 删除 / 设为发布目标。
 struct DraftListView: View {
@@ -76,24 +77,22 @@ struct DraftListView: View {
                 }
             }
         }
-        .alert(
-            "确认删除草稿？",
+        // 弹层契约（规格 v0.1 §1.4）：破坏性确认必须走 .brickConfirm（底层 .confirmationDialog），
+        // 禁止业务直接调 .alert。
+        .brickConfirm(
+            title: "确认删除草稿？",
+            message: "草稿「\(pendingDeletion?.title ?? "")」删除后不可恢复，需要重新创建。",
+            confirmLabel: "删除",
+            destructive: true,
             isPresented: Binding(
                 get: { pendingDeletion != nil },
                 set: { if !$0 { pendingDeletion = nil } }
             )
         ) {
-            Button("删除", role: .destructive) {
-                if let draft = pendingDeletion {
-                    Task { await state.deleteDraft(mediaID: draft.mediaID) }
-                }
-                pendingDeletion = nil
+            if let draft = pendingDeletion {
+                Task { await state.deleteDraft(mediaID: draft.mediaID) }
             }
-            Button("取消", role: .cancel) {
-                pendingDeletion = nil
-            }
-        } message: {
-            Text("草稿「\(pendingDeletion?.title ?? "")」删除后不可恢复，需要重新创建。")
+            pendingDeletion = nil
         }
     }
 }
