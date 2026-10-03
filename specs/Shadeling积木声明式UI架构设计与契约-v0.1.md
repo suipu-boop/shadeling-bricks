@@ -383,6 +383,33 @@ AIGC:
 | 状态局部更新 | Phase B 起支持 | 仅更新 `state_snapshot` 并复用上一帧结构（插值重求值），适合纯文本/数值刷新 |
 
 三种策略均以 `state_version` 单调递增为前提；渲染器对乱序帧直接丢弃并记日志。
+
+### 2.8.1 三模式实现细则（B2，2026-10-03 落地）
+
+实现：`app/Sources/BrickRenderer/UIPatch.swift` + `BrickRendererStore.swift`（底座侧）、`sdk/python/brick_sdk.py`（逻辑进程侧）。
+线格式见 §4.5；本节只补「渲染器如何判定合法」的细则。
+
+**路径文法**：`path := "root" ( "." key | "[" index "]" )*`；`root` 单独出现表示根节点本身。
+`key` 限 `[A-Za-z_][A-Za-z0-9_-]*`，`index` 为非负整数，路径一律从 `root` 起算。
+
+| 操作 | 语义 | 拒绝条件（整帧 `4303`） |
+|---|---|---|
+| `set` | 替换**已存在**的目标（含 `root` 整树替换） | 目标不存在（键写错不得静默新建） |
+| `insert` | 末段 `[i]` → 数组插入（`0...count`，`count` 为追加）；末段 `.key` → 新建对象键 | 键已存在、下标越界、路径为 `root` 本身 |
+| `remove` | 删除数组元素或对象键 | 目标不存在、路径为 `root` 本身 |
+
+- **patch 与 full 同一套校验标准**：patch 先应用到上一有效帧的 JSON 树，结果整体走严格解码 + 全量校验
+  （节点数 / 深度 / 体积 / 键白名单 / id 唯一）。任一失败 → **整帧拒绝，保留上一有效帧**，回 `ui/error`。
+- **操作数上限** `maxPatchOps`（超限 `4304`）；`patch` 可为单个操作对象（等价单元素数组），空数组 → `4303`。
+- **基底约束**：`patch` / `state` 帧都必须有上一有效帧（首帧必须 `mode=full`），否则 `4303`；
+  `patch` 不得携带 `root`，`state` 不得携带 `root` / `patch`（整树替换请发 `full`）。
+- **state 帧**：仅换 `state_snapshot` 并复用上一帧结构（插值重求值），体积按快照计；
+  缺 `state_snapshot` → `4303`。
+- **SDK 侧默认行为**（`push(mode="auto")`）：`render(state)` 与上一帧一致 → 自动发 `state`；
+  否则发 `full`。`push_patch(ops)` 发 `patch`，无基底时降级为 `full`；事件处理器内已自发帧时，
+  事件末尾不再兜底补帧（避免重复帧）。
+- **SDK 不校验 ops 与 `render(state)` 等价**（只做转发与基底记录）：两者不一致时，底座以
+  「patch 结果」为准，逻辑进程需自行保证一致，否则后续 `state` 帧插值会基于旧结构。
 # 三、积木 manifest v2 字段定义
 
 ## 3.1 设计原则
@@ -698,6 +725,42 @@ Content-Length: <字节数>\r\n
   }
 }
 ```
+
+**UI 快照（上行，路径 patch / B2）**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "ui/update",
+  "params": {
+    "state_version": 43,
+    "mode": "patch",
+    "patch": [
+      { "op": "set", "path": "root.children[1].props.value", "value": "已保存" },
+      { "op": "insert", "path": "root.children[2].children[3]",
+        "value": { "type": "text", "id": "row_4", "props": { "value": "第 4 条" } } },
+      { "op": "remove", "path": "root.children[2].children[0]" }
+    ],
+    "state_snapshot": { "items": 12, "loading": false }
+  }
+}
+```
+
+**UI 快照（上行，状态局部 / B2）**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "ui/update",
+  "params": {
+    "state_version": 44,
+    "mode": "state",
+    "state_snapshot": { "items": 13, "loading": false }
+  }
+}
+```
+
+> `state` 帧只换状态，结构沿用上一有效帧；插值节点按新状态重求值。判据与拒绝条件见 §2.8.1。
 
 **能力调用（上行 request）**
 
