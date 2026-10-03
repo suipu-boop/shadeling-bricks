@@ -2,12 +2,14 @@
 AIGC:
     Label: "1"
     ContentProducer: 001191440300708461136T1XGW3
-    ProduceID: 1ff3ab34626ddcd667748776b4e29487_f1946ee4b98c11f18442525400de85a5
-    ReservedCode1: 5+BzPbrJ96BaDPiXaYEUrFfsLQYLZeb9cB9pzdxVfCgunDEDP8Lp+UglGjH+WIgc8XndPpR8ltiTjeeQPwa0Tdntgowdv/VC0tURFtKwgsGEgfdEMppbz5CLIPNSNJkD9D6ejZHDDOFE+MpnOYktZLaKbMDs7BsXuSCw+kHuGDmYM2LGwi6fnjQgluo=
+    ProduceID: 1ff3ab34626ddcd667748776b4e29487_13bbab79bf4f11f1887c525400de85a5
+    ReservedCode1: p1H4aSs7lPtK+ixfbRvi/gTVIwsw23ExarkN/qL2bZtnU4laYxeCt+f+xxcT4MAC4PzoujNS605AizGaR3xGkIKjfwAlLE9+FYg7RiP6yMW8haYWbu6vMrMp+zgrPnu/2sRm/cF+zSt945VLYnkkyvZ9DJXqSCyRS8KNOl3N7of9SkBtG6PaMoty3Pk=
     ContentPropagator: 001191440300708461136T1XGW3
-    PropagateID: 1ff3ab34626ddcd667748776b4e29487_f1946ee4b98c11f18442525400de85a5
-    ReservedCode2: 5+BzPbrJ96BaDPiXaYEUrFfsLQYLZeb9cB9pzdxVfCgunDEDP8Lp+UglGjH+WIgc8XndPpR8ltiTjeeQPwa0Tdntgowdv/VC0tURFtKwgsGEgfdEMppbz5CLIPNSNJkD9D6ejZHDDOFE+MpnOYktZLaKbMDs7BsXuSCw+kHuGDmYM2LGwi6fnjQgluo=
+    PropagateID: 1ff3ab34626ddcd667748776b4e29487_13bbab79bf4f11f1887c525400de85a5
+    ReservedCode2: p1H4aSs7lPtK+ixfbRvi/gTVIwsw23ExarkN/qL2bZtnU4laYxeCt+f+xxcT4MAC4PzoujNS605AizGaR3xGkIKjfwAlLE9+FYg7RiP6yMW8haYWbu6vMrMp+zgrPnu/2sRm/cF+zSt945VLYnkkyvZ9DJXqSCyRS8KNOl3N7of9SkBtG6PaMoty3Pk=
 ---
+
+
 
 # Shadeling 积木声明式 UI 架构设计与契约 v0.1
 
@@ -963,7 +965,7 @@ Content-Length: <字节数>\r\n
 | `InstalledBrickManifest.declaredPermissions` / `grantedPermissions` | 字段语义不变；新增 `declaredPermissions` 与 `grantedPermissions` 差集用于 `4309` 判定 |
 | `429x` 配额段 | 语义不变；本文新增配额在其之上叠加，不改变既有返回值 |
 
-**待决策项**：`ui.sheet` 是否作为独立权限项——若渲染器对全部积木默认开放弹层（推荐，因弹层由渲染器托管、无额外风险面），该项可降级为「提示项」，以减少安装页噪音。该项需在 Phase A 结束时拍板。
+**已拍板（2026-09-26）**：`ui.sheet` **不设独立权限项，降级为「提示项」**——弹层由渲染器托管、对所有积木默认开放，无额外风险面，作为独立权限项只会增加安装页噪音。具体语义：`ui.sheet` 仍在合法权限枚举内（声明它不判未知、不拒装），仍按低危记账并默认授权，但安装确认页**不渲染独立开关**，仅以「提示项」列示。拍板来源：Shadeling `docs/TODO.md` L65（2026-09-26 拍板四项之一）。落地见 §7.4 C1。
 
 ## 5.7 决策基线
 
@@ -1124,10 +1126,19 @@ Content-Length: <字节数>\r\n
 
 | 任务 | 交付物 | 依赖 |
 |---|---|---|
-| C1 权限枚举扩展（UI 侧 7 项）+ 安装确认 UI（级别映射 + 高危二次确认） | `BrickPermission` 扩展 + 安装页 | Phase A |
+| C1 权限枚举扩展（UI 侧 7 项）+ 安装确认 UI（级别映射 + 高危二次确认）——**✅ 已落地（2026-10-03）** | `BrickPermission` 扩展 + 安装页 | Phase A |
 | C2 运行时闸门（三重校验 + 违规计数 + 高危首调确认 + 审计日志） | 闸门扩展 | C1 |
 | C3 配额（事件频率 / 节点 / 内存 / 存储 / 重启保护）+ 超限降级提示 | 配额模块 | C2 |
 | C4 安装器 v2 校验 + `verify_products.py` 三项扩展 | 安装器 + 发布闸门 | A4 |
+
+> **C1 落地说明（2026-10-03，Shadeling 实现侧，工作树改动、未提交）**
+> - 枚举：`BrickPermission` 拆为 `bridgeKnown`（桥 5 项，逐字未动）+ `uiSideKnown`（本契约 §5.2 的 UI 侧 7 项），`known` = 两者拼接；`uiSideHighRisk = []`（UI 侧无高危项显式落点）。
+> - 级别映射：低 = `ui.sheet` / `ui.clipboard.write` / `notify`；中 = `ui.open_url` / `fs.pick` / `auth.biometric` / `ocr.recognize`；高 = `agent.browser` / `agent.local`；未知名按中危兜底（不静默提权）。未知值闸门按命名空间前缀（`agent.` / `ui.` / `fs.` / `auth.` / `ocr.`）判定。
+> - `ui.sheet`：按 §5.2 / §5.6 的 2026-09-26 拍板实现为提示项（`hintOnly`；留在合法枚举内、按低危默认授权、确认页不渲染独立开关）。
+> - 同步点：底座 `runtime/brick_bridge.py` 新增 `UI_PERMISSIONS`（7 项，与 `uiSideKnown` 逐项一致），`KNOWN_PERMISSIONS` = 桥 5 + UI 7；`PERMISSION_TOOLS` / `HIGH_RISK_PERMISSIONS` 未动。
+> - 安装确认页：低危默认勾选、中危默认不勾、高危标红 + 二次确认弹窗；提示项灰标签仅列示。
+> - 验证结果：`swift build` 零 warning（本轮改动文件）；`swift test` **254 tests / 0 failures**（含新增 `BrickPermissionPhaseCTests` 13 例）；`python3 -m unittest runtime.tests.test_brick_permission_ui_side` **12 tests OK**。
+> - 尚未覆盖：安装确认页的真机目视验收（标红 / 提示项标签 / 二次确认弹窗）待开 flag 后走完整安装流程。
 
 **验收标准**
 
@@ -1299,4 +1310,5 @@ Content-Length: <字节数>\r\n
 | G3 | 不为迁移而放宽隔离红线（不放行任意脚本 / 远程加载） | 受限节点须单独安全评审，不得以"迁移便利"为由降低标准 |
 | G4 | 上传类写能力按高危处理 | 写操作影响面大于只读抓取，须标红并二次确认 |
 | G5 | 混合形态仅作过渡，设明确终态期限 | 与第六章兼容期上限 2 个小版本一致 |
+*（内容由AI生成，仅供参考）*
 *（内容由AI生成，仅供参考）*
