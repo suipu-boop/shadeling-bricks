@@ -16,7 +16,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from verify_products import verify_product  # noqa: E402
+from verify_products import (  # noqa: E402
+    verify_product,
+    verify_ui_document,
+    verify_v2_declarative_gates,
+)
 
 
 def make_manifest(name="demo", version="1.0.0", kind="product", **overrides):
@@ -67,6 +71,104 @@ def make_product(vault: Path, name="demo", version="1.0.0", manifest=None,
     index = {"products": [{k: manifest.get(k) for k in
                            ("name", "version", "kind", "download_url", "sha256")}]}
     return pdir, index
+
+
+# ——————————————————————————————————————————————————————————————
+# C4 声明式（v2）三项闸门用例（2026-10-04 新增）
+#   ① ui.entry 存在且可解析  ② 无裸弹层调用  ③ logic.entry 已签名或哈希登记
+# ——————————————————————————————————————————————————————————————
+
+def ui_doc(root=None):
+    """最小合法 UI 文档（§2.2）：单行文本。"""
+    if root is None:
+        root = {"type": "container", "id": "root",
+                "props": {"direction": "vertical", "gap": 16},
+                "children": [{"type": "text", "id": "title", "props": {"value": "hi"}}]}
+    return {"schema": "shadeling-ui/1", "version": 1, "root": root}
+
+
+def deep_root(levels):
+    """构造 levels+1 层嵌套的 container 链（root 深度 = levels+1）。"""
+    node = {"type": "text", "id": "leaf", "props": {"value": "x"}}
+    for i in range(levels):
+        node = {"type": "container", "id": f"c{i}", "children": [node]}
+    return node
+
+
+def make_v2_manifest(name="demo", version="1.0.0", ui_entry="ui/main.json",
+                     logic_entry="logic/main.py", logic_sha256=None,
+                     logic_signature=None, **overrides):
+    logic = {"entry": logic_entry} if logic_entry else {}
+    if logic_sha256 is not None:
+        logic["sha256"] = logic_sha256
+    if logic_signature is not None:
+        logic["signature"] = logic_signature
+    m = {
+        "schema": "brick-app/v2",
+        "id": f"com.shadeling.brick.{name}",
+        "name": name,
+        "title": "Demo V2",
+        "version": version,
+        "author": "Shadeling",
+        "summary": "test v2 product",
+        "kind": "product",
+        "ui": {"entry": ui_entry} if ui_entry else {},
+        "logic": logic,
+        "permissions": [],
+        "download_url": f"https://example.com/{name}-{version}.zip",
+        "sha256": "0" * 64,
+    }
+    m.update(overrides)
+    return m
+
+
+def make_v2_product(vault: Path, name="demo", version="1.0.0", manifest=None,
+                    ui=None, logic_bytes=b"print('hi')", ui_text=None,
+                    ui_in_zip=True, logic_in_zip=True, inner_manifest=True):
+    """构造 v2 产品目录：ui/logic 入口 + 包内 manifest + index 登记。"""
+    pdir = vault / "products" / name
+    rel = pdir / "releases" / version
+    rel.mkdir(parents=True, exist_ok=True)
+    zip_path = rel / f"{name}-{version}.zip"
+    if manifest is None:
+        manifest = make_v2_manifest(
+            name=name, version=version,
+            logic_sha256=hashlib.sha256(logic_bytes).hexdigest())
+    ui = ui_doc() if ui is None else ui
+    m_ui = manifest.get("ui") if isinstance(manifest.get("ui"), dict) else {}
+    m_logic = manifest.get("logic") if isinstance(manifest.get("logic"), dict) else {}
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        if ui_in_zip and m_ui.get("entry"):
+            zf.writestr(m_ui["entry"],
+                        ui_text if ui_text is not None else json.dumps(ui, ensure_ascii=False))
+        if logic_in_zip and m_logic.get("entry"):
+            zf.writestr(m_logic["entry"], logic_bytes)
+        if inner_manifest:
+            zf.writestr("manifest.json",
+                        json.dumps(zip_manifest(manifest), ensure_ascii=False))
+    manifest["sha256"] = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+    (pdir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False),
+                                        encoding="utf-8")
+    index = {"products": [{k: manifest.get(k) for k in
+                           ("name", "version", "kind", "download_url", "sha256")}]}
+    return pdir, index
+
+
+def patch_inner_manifest(pdir: Path, index: dict, mutate):
+    """重写 zip 内 manifest 并同步 sha256，隔离「包内 manifest 不一致」用例。"""
+    zip_path = next((pdir / "releases").glob("*/*.zip"))
+    m = json.loads((pdir / "manifest.json").read_text(encoding="utf-8"))
+    with zipfile.ZipFile(zip_path) as zf:
+        others = {n: zf.read(n) for n in zf.namelist() if n != "manifest.json"}
+    inner = zip_manifest(m)
+    mutate(inner)
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("manifest.json", json.dumps(inner, ensure_ascii=False))
+        for n, b in others.items():
+            zf.writestr(n, b)
+    m["sha256"] = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+    (pdir / "manifest.json").write_text(json.dumps(m, ensure_ascii=False), encoding="utf-8")
+    index["products"][0]["sha256"] = m["sha256"]
 
 
 class VerifyProductsTest(unittest.TestCase):
@@ -182,6 +284,153 @@ class VerifyProductsTest(unittest.TestCase):
         for d in dirs:
             with self.subTest(product=d.name):
                 self.assertEqual(verify_product(d, index), [])
+
+    # —— C4 声明式（v2）三项闸门 ——
+
+    def test_v2_valid_product_passes(self):
+        with tempfile.TemporaryDirectory() as td:
+            pdir, index = make_v2_product(Path(td))
+            self.assertEqual(verify_product(pdir, index), [])
+
+    def test_v2_compat_v1_product_skips_gates(self):
+        """§3.5 兼容期：v1 bundle 形态无 ui/logic 段，三项闸门不适用。"""
+        with tempfile.TemporaryDirectory() as td:
+            pdir, _ = make_product(Path(td))
+            zip_path = next((pdir / "releases").glob("*/*.zip"))
+            m = json.loads((pdir / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(verify_v2_declarative_gates(zip_path, m), [])
+
+    # ① ui.entry 存在且可解析
+
+    def test_v2_missing_ui_section(self):
+        with tempfile.TemporaryDirectory() as td:
+            m = make_v2_manifest(logic_sha256="0" * 64)
+            del m["ui"]
+            pdir, index = make_v2_product(Path(td), manifest=m)
+            self.assertTrue(any("缺 ui 段" in e for e in verify_product(pdir, index)))
+
+    def test_v2_missing_ui_entry(self):
+        with tempfile.TemporaryDirectory() as td:
+            m = make_v2_manifest(ui_entry=None, logic_sha256="0" * 64)
+            pdir, index = make_v2_product(Path(td), manifest=m)
+            self.assertTrue(any("缺 ui.entry" in e for e in verify_product(pdir, index)))
+
+    def test_v2_ui_entry_absent_in_zip(self):
+        with tempfile.TemporaryDirectory() as td:
+            pdir, index = make_v2_product(Path(td), ui_in_zip=False)
+            self.assertTrue(any("zip 内缺 UI 入口" in e for e in verify_product(pdir, index)))
+
+    def test_v2_ui_entry_path_escape(self):
+        with tempfile.TemporaryDirectory() as td:
+            m = make_v2_manifest(ui_entry="../evil.json", logic_sha256="0" * 64)
+            pdir, index = make_v2_product(Path(td), manifest=m, ui_in_zip=False)
+            self.assertTrue(any("ui.entry 路径非法" in e for e in verify_product(pdir, index)))
+
+    def test_v2_ui_entry_unparsable(self):
+        with tempfile.TemporaryDirectory() as td:
+            pdir, index = make_v2_product(Path(td), ui_text="{not json")
+            self.assertTrue(any("UI 入口不可解析" in e for e in verify_product(pdir, index)))
+
+    def test_v2_ui_document_structural_errors(self):
+        cases = {
+            "schema": ({"schema": "shadeling-ui/9", "version": 1,
+                        "root": ui_doc()["root"]}, "schema 必须为 shadeling-ui/1"),
+            "version": ({"schema": "shadeling-ui/1", "version": "1",
+                         "root": ui_doc()["root"]}, "version 必须为整数"),
+            "no_root": ({"schema": "shadeling-ui/1", "version": 1}, "缺 root 节点"),
+            "leaf_root": ({"schema": "shadeling-ui/1", "version": 1,
+                           "root": {"type": "text", "id": "root"}}, "root 必须为容器类节点"),
+            "unknown_type": (ui_doc({"type": "container", "id": "root", "children": [
+                {"type": "chart", "id": "c1"}]}), "节点类型不在白名单"),
+            "bad_id": (ui_doc({"type": "container", "id": "Root", "children": [
+                {"type": "text", "id": "ok"}]}), "节点 id 非法"),
+            "leaf_children": (ui_doc({"type": "container", "id": "root", "children": [
+                {"type": "text", "id": "t", "children": []}]}), "叶子节点不得携带 children"),
+            "too_deep": (ui_doc(deep_root(16)), "嵌套深度超上限"),
+        }
+        for label, (doc, expect) in cases.items():
+            with self.subTest(case=label):
+                errs = verify_ui_document(doc)
+                self.assertTrue(any(expect in e for e in errs), f"{label}: {errs}")
+
+    # ② 无裸弹层调用
+
+    def test_v2_bare_overlay_rejected(self):
+        for bare in ("sheet", "dialog", "alert", "confirm", "modal", "toast"):
+            with self.subTest(bare=bare):
+                doc = ui_doc({"type": "container", "id": "root", "children": [
+                    {"type": bare, "id": "pop"}]})
+                errs = verify_ui_document(doc)
+                self.assertTrue(any("裸弹层调用" in e for e in errs), errs)
+
+    def test_v2_overlay_node_accepted(self):
+        doc = ui_doc({"type": "container", "id": "root", "children": [
+            {"type": "overlay", "id": "confirm", "subtype": "dialog",
+             "props": {"title": "确认", "message": "删除？"}}]})
+        self.assertEqual(verify_ui_document(doc), [])
+
+    def test_v2_overlay_bad_subtype(self):
+        doc = ui_doc({"type": "container", "id": "root", "children": [
+            {"type": "overlay", "id": "confirm", "subtype": "popover"}]})
+        self.assertTrue(any("overlay 节点子类型非法" in e for e in verify_ui_document(doc)))
+
+    def test_v2_bare_overlay_entry_fails_in_product(self):
+        with tempfile.TemporaryDirectory() as td:
+            ui = ui_doc({"type": "container", "id": "root", "children": [
+                {"type": "sheet", "id": "pop"}]})
+            pdir, index = make_v2_product(Path(td), ui=ui)
+            self.assertTrue(any("裸弹层调用" in e for e in verify_product(pdir, index)))
+
+    # ③ logic.entry 已签名或哈希登记
+
+    def test_v2_missing_logic_section(self):
+        with tempfile.TemporaryDirectory() as td:
+            m = make_v2_manifest(logic_entry=None)
+            del m["logic"]
+            pdir, index = make_v2_product(Path(td), manifest=m)
+            self.assertTrue(any("缺 logic 段" in e for e in verify_product(pdir, index)))
+
+    def test_v2_missing_logic_entry(self):
+        with tempfile.TemporaryDirectory() as td:
+            m = make_v2_manifest(logic_entry=None, logic_sha256="0" * 64)
+            pdir, index = make_v2_product(Path(td), manifest=m, logic_in_zip=False)
+            self.assertTrue(any("缺 logic.entry" in e for e in verify_product(pdir, index)))
+
+    def test_v2_logic_entry_absent_in_zip(self):
+        with tempfile.TemporaryDirectory() as td:
+            pdir, index = make_v2_product(Path(td), logic_in_zip=False)
+            self.assertTrue(any("zip 内缺 logic.entry" in e for e in verify_product(pdir, index)))
+
+    def test_v2_logic_unregistered(self):
+        with tempfile.TemporaryDirectory() as td:
+            m = make_v2_manifest()  # 既无 sha256 也无 signature
+            pdir, index = make_v2_product(Path(td), manifest=m)
+            self.assertTrue(any("未登记哈希或签名" in e for e in verify_product(pdir, index)))
+
+    def test_v2_logic_hash_mismatch(self):
+        with tempfile.TemporaryDirectory() as td:
+            m = make_v2_manifest(logic_sha256="a" * 64)
+            pdir, index = make_v2_product(Path(td), manifest=m)
+            self.assertTrue(any("哈希不一致" in e for e in verify_product(pdir, index)))
+
+    def test_v2_logic_signature_accepted(self):
+        with tempfile.TemporaryDirectory() as td:
+            m = make_v2_manifest(logic_signature="shadeling-sig/v1:" + "b" * 64)
+            pdir, index = make_v2_product(Path(td), manifest=m)
+            self.assertEqual(verify_product(pdir, index), [])
+
+    def test_v2_logic_signature_bad_format(self):
+        with tempfile.TemporaryDirectory() as td:
+            m = make_v2_manifest(logic_signature="TODO-sign-me")
+            pdir, index = make_v2_product(Path(td), manifest=m)
+            self.assertTrue(any("signature 格式非法" in e for e in verify_product(pdir, index)))
+
+    def test_v2_inner_manifest_ui_mismatch(self):
+        with tempfile.TemporaryDirectory() as td:
+            pdir, index = make_v2_product(Path(td))
+            patch_inner_manifest(pdir, index, lambda inner: inner.pop("ui"))
+            errs = verify_product(pdir, index)
+            self.assertTrue(any("不一致：ui=" in e for e in errs))
 
 
 if __name__ == "__main__":
