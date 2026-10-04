@@ -2,12 +2,14 @@
 AIGC:
     Label: "1"
     ContentProducer: 001191440300708461136T1XGW3
-    ProduceID: 1ff3ab34626ddcd667748776b4e29487_13bbab79bf4f11f1887c525400de85a5
-    ReservedCode1: p1H4aSs7lPtK+ixfbRvi/gTVIwsw23ExarkN/qL2bZtnU4laYxeCt+f+xxcT4MAC4PzoujNS605AizGaR3xGkIKjfwAlLE9+FYg7RiP6yMW8haYWbu6vMrMp+zgrPnu/2sRm/cF+zSt945VLYnkkyvZ9DJXqSCyRS8KNOl3N7of9SkBtG6PaMoty3Pk=
+    ProduceID: 1ff3ab34626ddcd667748776b4e29487_a7c10793bfd511f1884b525400cd780f
+    ReservedCode1: 0AP5WEW7TJHvIRs//XUkCAXd1aq6DOq8P0Jgrxx1Hn2VpDk+nnmwMgGNJ58hi30SVXA5lArCL5J/c7HdXpJTRw3fz4rTWZfWs3iQMt56njy0YRItR7uKKNkxOotGTRtGz8tv/ZXJDnHqFRYJRqDd8NX/UWcc0fXErQoTfMIoMPMLgzPxpnpzV5W2JvY=
     ContentPropagator: 001191440300708461136T1XGW3
-    PropagateID: 1ff3ab34626ddcd667748776b4e29487_13bbab79bf4f11f1887c525400de85a5
-    ReservedCode2: p1H4aSs7lPtK+ixfbRvi/gTVIwsw23ExarkN/qL2bZtnU4laYxeCt+f+xxcT4MAC4PzoujNS605AizGaR3xGkIKjfwAlLE9+FYg7RiP6yMW8haYWbu6vMrMp+zgrPnu/2sRm/cF+zSt945VLYnkkyvZ9DJXqSCyRS8KNOl3N7of9SkBtG6PaMoty3Pk=
+    PropagateID: 1ff3ab34626ddcd667748776b4e29487_a7c10793bfd511f1884b525400cd780f
+    ReservedCode2: 0AP5WEW7TJHvIRs//XUkCAXd1aq6DOq8P0Jgrxx1Hn2VpDk+nnmwMgGNJ58hi30SVXA5lArCL5J/c7HdXpJTRw3fz4rTWZfWs3iQMt56njy0YRItR7uKKNkxOotGTRtGz8tv/ZXJDnHqFRYJRqDd8NX/UWcc0fXErQoTfMIoMPMLgzPxpnpzV5W2JvY=
 ---
+
+
 
 
 
@@ -505,6 +507,12 @@ AIGC:
 | `runtime` | string | 否 | `executable` | `executable`（自带可执行）/ `python3`（底座内置解释器） | 枚举外 → 拒绝 |
 | `args` | string[] | 否 | `[]` | 启动参数 | 单参数 ≤256 字符，禁止 shell 元字符 |
 | `env` | object | 否 | `{}` | 额外环境变量 | 键白名单（`SHADELING_*` 保留，禁止覆盖）；值禁止含路径分隔符与凭据样式串 |
+
+> **补充判定：`logic.entry` 的哈希 / 签名登记字段（2026-10-04 补记，待 owner 确认）**
+> 安装器与发布闸门（§3.6-7 / §7.4 C4）要求 `logic.entry` 在 manifest 中**登记哈希或签名**，登记口径暂定如下：
+> - `logic.sha256`：64 位十六进制摘要，**推荐**（安装期与包内实际文件比对，不一致则拒绝安装）；
+> - `logic.signature`：以 `shadeling-sig/v1:` 为前缀的签名字符串，**仅做格式校验，不做验签**。
+> 两者至少其一。现状只做「存在性 + 格式（+ `sha256` 一致性）」校验，**真实验签尚未实现**；本段为补充判定，未写入上方 §3.3 正式字段表，**待 owner 确认后方可作为契约正式口径**（对应 Shadeling `specs/state-2026-10-03.md` §12.6-1）。
 
 ### 权限段 `permissions`
 
@@ -1127,9 +1135,9 @@ Content-Length: <字节数>\r\n
 | 任务 | 交付物 | 依赖 |
 |---|---|---|
 | C1 权限枚举扩展（UI 侧 7 项）+ 安装确认 UI（级别映射 + 高危二次确认）——**✅ 已落地（2026-10-03）** | `BrickPermission` 扩展 + 安装页 | Phase A |
-| C2 运行时闸门（三重校验 + 违规计数 + 高危首调确认 + 审计日志） | 闸门扩展 | C1 |
-| C3 配额（事件频率 / 节点 / 内存 / 存储 / 重启保护）+ 超限降级提示 | 配额模块 | C2 |
-| C4 安装器 v2 校验 + `verify_products.py` 三项扩展 | 安装器 + 发布闸门 | A4 |
+| C2 运行时闸门（三重校验 + 违规计数 + 高危首调确认 + 审计日志）——**✅ 已落地（2026-10-04，底座侧 + 宿主侧）** | 闸门扩展 | C1 |
+| C3 配额（事件频率 / 节点 / 内存 / 存储 / 重启保护）+ 超限降级提示——**✅ 已落地（2026-10-04）** | 配额模块 | C2 |
+| C4 安装器 v2 校验 + `verify_products.py` 三项扩展——**✅ 已落地（2026-10-04）** | 安装器 + 发布闸门 | A4 |
 
 > **C1 落地说明（2026-10-03，Shadeling 实现侧，工作树改动、未提交）**
 > - 枚举：`BrickPermission` 拆为 `bridgeKnown`（桥 5 项，逐字未动）+ `uiSideKnown`（本契约 §5.2 的 UI 侧 7 项），`known` = 两者拼接；`uiSideHighRisk = []`（UI 侧无高危项显式落点）。
@@ -1137,8 +1145,26 @@ Content-Length: <字节数>\r\n
 > - `ui.sheet`：按 §5.2 / §5.6 的 2026-09-26 拍板实现为提示项（`hintOnly`；留在合法枚举内、按低危默认授权、确认页不渲染独立开关）。
 > - 同步点：底座 `runtime/brick_bridge.py` 新增 `UI_PERMISSIONS`（7 项，与 `uiSideKnown` 逐项一致），`KNOWN_PERMISSIONS` = 桥 5 + UI 7；`PERMISSION_TOOLS` / `HIGH_RISK_PERMISSIONS` 未动。
 > - 安装确认页：低危默认勾选、中危默认不勾、高危标红 + 二次确认弹窗；提示项灰标签仅列示。
-> - 验证结果：`swift build` 零 warning（本轮改动文件）；`swift test` **254 tests / 0 failures**（含新增 `BrickPermissionPhaseCTests` 13 例）；`python3 -m unittest runtime.tests.test_brick_permission_ui_side` **12 tests OK**。
+> - 验证结果：`swift build` 零 warning（本轮改动文件）；`swift test` **255 tests / 0 failures**（含新增 `BrickPermissionPhaseCTests` 14 例）；`python3 -m unittest runtime.tests.test_brick_permission_ui_side` **12 tests OK**。（计数口径以 Shadeling `specs/state-2026-10-03.md` §11.4 为准。）
 > - 尚未覆盖：安装确认页的真机目视验收（标红 / 提示项标签 / 二次确认弹窗）待开 flag 后走完整安装流程。
+
+> **C2 落地说明（2026-10-04，Shadeling 实现侧，工作树改动、未提交）**
+> - 底座侧：`runtime/brick_gate.py` 三重校验（「已声明 → 已授予 → 未超配额」）+ 违规累计 3 次置 `interrupt_session` + 首调确认与 `reentry` + 审计脱敏保留 30 天；`brick_bridge.py` / `ipc.py` 接 `declared_permissions` 与 `brick_capability_call`（只裁决、返回 `forward` 目标）；4309 / 4310 入 `error-codes.json`，IPC 方法数 105 → 106；测试 54 例（37 + 12 + 5）全绿。
+> - 宿主侧四项（`app/Sources/ShadelingApp/BrickCapabilityHost.swift`，457 行）：① 能力转发——按回执 `forward` 转发到既有 handler（UI 侧 7 项），未注入能力面时保持一律回 4309 的旧行为；② 首调确认——`BrickCapabilityConfirmSheet`（允许本次 / 本会话允许 / 拒绝），允许后带 `confirm=true` 重入闸门、拒绝回 4309，经 `ContentView` 统一弹窗层上屏；③ 违规中断——`BrickProcessSupervisor.interruptSession(brickID:notice:)` 终止会话并落槽位提示（复用崩溃态容器族）；④ 市场质量统计——按本契约 §4.10 / §5.3.2 只定义聚合口径与展示方、**未定义宿主上报通道**，本轮不做投递，以 `BrickQualityNotes` 显式登记该结论，底座登记侧不变。
+> - 验证：`swift test` **313 tests / 0 failures**（新增 `BrickCapabilityHostTests` 17 例）。
+> - 待 owner 定：市场质量统计的宿主上报通道（端点 / 鉴权 / 批量口径）。待真机验收：确认弹窗三态与 `confirm=true` 重入、违规 3 次中断的槽位提示。
+
+> **C3 落地说明（2026-10-04，Shadeling 实现侧，工作树改动、未提交）**
+> - 底座：`runtime/brick_quota.py`（1172 行）——事件频率默认 30/s（manifest 可收紧 1~120，超频丢弃并按 4306 降级）、单帧节点数 2000 / 嵌套深度 16 / JSON 体积 512 KB（超限按 4304 拒帧）、内存软上限 512 MB 警告 + 1 GB 强制重启 4308、私有存储默认 128 MB 超限拒写 4310、重启保护 60s 内 3 次；**manifest 只能收紧不能放宽全局上限**；只做裁决与登记、不产生副作用。
+> - 接线：`ipc.py` 新增五个宿主面方法 `brick_quota_ui_event` / `brick_quota_ui_frame` / `brick_quota_memory` / `brick_quota_storage` / `brick_quota_restart`（收参数、回判据；杀进程 / 拒写盘 / 出横幅由宿主按回执执行），`RuntimeQuotaGuard` 实例化于 `ipc.py`。
+> - 宿主：`BrickQuotaHost.swift`（227 行）回执 → 呈现映射（4308 复用崩溃态容器并标注「已自动重启」；4310 复用槽位 banner），`BrickProcessSupervisor.noteQuotaDecision` / `quotaNotice` / `clearQuotaNotice` 落句柄。
+> - 验证：`test_brick_quota` 32 + `test_brick_quota_ipc` 25 + `test_brick_quota_runtime` 31 = 88 例 OK；`swift test` **313 tests / 0 failures**（新增 `BrickQuotaHostTests` 10 例）。待真机验收：内存强杀、存储拒写、重启保护、超频降级横幅。
+
+> **C4 落地说明（2026-10-04，Shadeling 实现侧 + 本仓发布侧，工作树改动、未提交）**
+> - 宿主安装器：`app/Sources/ShadelingApp/BrickInstallGate.swift`（404 行）——§3.6-1 字段级规则（元数据 / nav / ui.theme / logic.args / logic.env / legacy 误用，含凭据样式串识别）、§3.6-2 跨包语义（`brick_id` 唯一性 + 同 id 版本单调递增）、§3.6-5 quota 钳制警告记录、§3.6-6 UI 文档离线预校验（含图片引用必须落在包内）；`AppModel` 安装流程接入（`validate` / `installedManifests` / `quotaWarnings`，警告写入快照 `quota_warnings`）。
+> - 发布闸门（本仓 `scripts/verify_products.py`，+179 行）：声明式（`brick-app/v2`）三项扩展 —— ① `ui.entry` 存在且在包内可解析（§2.2 / §2.3 / §2.7：schema、节点类型白名单、节点 id 文法、节点数 2000 / 深度 16）；② 无裸弹层调用（弹层必须写成 `overlay` 节点 + 子类型，含系统弹层别名拦截）；③ `logic.entry` 已登记哈希或签名（`manifest.logic.sha256` 64 位十六进制，或 `manifest.logic.signature` 前缀 `shadeling-sig/v1:`，仅格式与一致性校验）。`ZIP_MANIFEST_FIELDS` 增补 `nav` / `ui` / `logic`；v1（bundle 形态）在兼容期不适用本组检查。
+> - 验证：`python3 -m unittest discover -s tests` **51 tests OK**（`test_verify_products` 31 + `test_verify` 12 + `test_pack_product` 8）；宿主 `BrickInstallGateTests` 29 例全绿。
+> - 待 owner 定：`logic.entry` 真实验签、`logic.env` 键白名单、`ZIP_MANIFEST_FIELDS` 增补口径与 v2 是否强制 `bundle` / `permissions` 硬卡点。待真机：装包负例验收。
 
 **验收标准**
 
