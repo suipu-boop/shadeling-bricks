@@ -57,6 +57,30 @@
       "kind": "product",
       "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/vault/releases/1.1.0/vault-1.1.0.zip",
       "sha256": "f25497c9cbd8dde80499ba1f7bf93c39e3f849d8767b62f6552f739a409046cf"
+    },
+    {
+      "name": "acct-perm",
+      "version": "1.0.0",
+      "kind": "product",
+      "download_url": "file:///Users/suipu/Library/Application Support/com.tencent.mac.marvis/MarvisData/User/oAN1i2ZBY9RZ_546iTLRNKmp7ZfY/workspace/conv_b04049182ad140308054c752158fff1f/output/acct/acct-perm-1.0.0.zip",
+      "sha256": "c2f081b85e2211c37e63552b5587c4a2e668f440fe1b1cf77f396a4bb52cecb4",
+      "size_kb": 11.3
+    },
+    {
+      "name": "acct-mem",
+      "version": "1.0.0",
+      "kind": "product",
+      "download_url": "file:///Users/suipu/Library/Application Support/com.tencent.mac.marvis/MarvisData/User/oAN1i2ZBY9RZ_546iTLRNKmp7ZfY/workspace/conv_b04049182ad140308054c752158fff1f/output/acct/acct-mem-1.0.0.zip",
+      "sha256": "2920baa517c3a86deca2e9013e968ff96150a0d951e70d50587ea27c315736ea",
+      "size_kb": 10.6
+    },
+    {
+      "name": "acct-flood",
+      "version": "1.0.0",
+      "kind": "product",
+      "download_url": "file:///Users/suipu/Library/Application Support/com.tencent.mac.marvis/MarvisData/User/oAN1i2ZBY9RZ_546iTLRNKmp7ZfY/workspace/conv_b04049182ad140308054c752158fff1f/output/acct/acct-flood-1.0.0.zip",
+      "sha256": "2e44cd762679a802bbca7c9f7841faf8018c06b89fdee1f837b23e7cdc963ec3",
+      "size_kb": 10.3
     }
   ]
 }
