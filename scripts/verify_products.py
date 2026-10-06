@@ -9,10 +9,13 @@ products/<id>/ 发布前强制自检：
    与仓库 manifest 逐字一致——安装器解压后读不到包内 manifest 会直接中止安装
 4. index.json products[] 已登记（name/version/kind/download_url/sha256 对齐）
 5. id 不与已发布积木冲突
-6. **声明式（`brick-app/v2`）三项扩展**（契约 §3.6-7，模板规格 §3 Phase 3）：
+6. **声明式（`brick-app/v2`）扩展**（契约 §3.3 / §3.5 / §3.6，模板规格 §3 Phase 3）：
+   - 三段硬卡点：`nav` / `ui` / `logic` 齐备（缺段或「存在但不是对象」即拒发布，§3.6-1）
    - `ui.entry` 存在且在 zip 内可解析（§2.2 文档结构 / §2.3 节点模型 / §2.7 静态约束）
    - 无裸弹层调用：弹层必须写成 `overlay` 节点 + 子类型，不得直接以弹层类型作节点
    - `logic.entry` 已登记哈希或签名（`manifest.logic.sha256` 或 `manifest.logic.signature`）
+   - `logic.env` 键白名单（显式正列举，首批为空集 = `logic.env` 必须为空对象，§3.6-5）
+   非 `brick-app/v2`（v1 / 未标 schema 的历史包）按 §3.5 兼容期不适用本组检查。
 
 契约权威：specs/brick-market-v2.md（brick-app/v1 manifest）、
 specs/Shadeling积木声明式UI架构设计与契约-v0.1.md §2 / §3.6 / §7.4
@@ -60,8 +63,12 @@ BARE_OVERLAY_TYPES = {"sheet", "dialog", "banner", "toast", "alert", "confirm",
                       "confirmation_dialog", "popover", "modal", "action_sheet", "hud"}
 NODE_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
-# 签名登记口径（契约仅要求「已签名或哈希登记」，未定格式；此处取 vault 统一前缀）
+# 签名登记口径（契约 §3.3 登记字段，2026-10-06 owner 拍板取 C；此处取 vault 统一前缀）
 SIGNATURE_PREFIX = "shadeling-sig/v1:"
+# §3.6-1（2026-10-06 owner 拍板 A）：brick-app/v2 强制 nav / ui / logic 三段齐备
+REQUIRED_SECTIONS = ("nav", "ui", "logic")
+# §3.3 / §3.6-5（2026-10-06 owner 拍板 B）：logic.env 显式正列举白名单，首批为空集
+ALLOWED_LOGIC_ENV_KEYS: frozenset = frozenset()
 
 
 class VerifyError(ValueError):
@@ -207,7 +214,7 @@ def verify_ui_entry(zf: zipfile.ZipFile, m: dict) -> list:
 
 
 def verify_logic_entry(zf: zipfile.ZipFile, m: dict) -> list:
-    """判据③：logic.entry 存在于包内，且已登记哈希（sha256）或签名（signature）。"""
+    """判据③：logic.entry 存在于包内，且已登记哈希（sha256）或签名（signature）（§3.3）。"""
     logic = m.get("logic")
     if not isinstance(logic, dict):
         return ["manifest 缺 logic 段：v2 产品必须声明逻辑入口（§3.3）"]
@@ -243,18 +250,63 @@ def verify_logic_entry(zf: zipfile.ZipFile, m: dict) -> list:
     return errs
 
 
+def verify_required_sections(m: dict) -> list:
+    """闸门①：`brick-app/v2` 强制 `nav` / `ui` / `logic` 三段齐备（§3.6-1）。
+
+    与宿主 `BrickInstallGate.validateRequiredSections` 同源：缺段（含「段存在但不是对象」）
+    即拒装 / 拒发布；v1（含未标 schema 的历史包）按 §3.5 兼容期不适用。
+    """
+    if m.get("schema") != SCHEMA_V2:
+        return []
+    errs = []
+    for key in REQUIRED_SECTIONS:
+        value = m.get(key)
+        if isinstance(value, dict):
+            continue
+        mark = "整段缺失" if value is None else "存在但不是对象"
+        errs.append(f"manifest 缺 {key} 段（{mark}）：{SCHEMA_V2} 强制 nav / ui / logic "
+                    f"三段齐备，缺一不可（§3.6-1）")
+    return errs
+
+
+def verify_logic_env(m: dict) -> list:
+    """闸门④：`logic.env` 键白名单（§3.3 / §3.6-5，显式正列举，首批为空集）。"""
+    logic = m.get("logic")
+    if not isinstance(logic, dict):
+        return []  # 缺 logic 段由 verify_required_sections 报出，此处不重复
+    env = logic.get("env")
+    if env is None:
+        return []
+    if not isinstance(env, dict):
+        return [f"logic.env 必须是对象，当前：{type(env).__name__}（§3.3）"]
+    unknown = sorted(k for k in env if k not in ALLOWED_LOGIC_ENV_KEYS)
+    if not unknown:
+        return []
+    return [f"logic.env 存在未登记键：{unknown}（白名单为显式正列举、当前为空集 = "
+            f"logic.env 必须为空对象；放行具体键须先做「底座 ↔ 契约 §3.3」同步登记，"
+            f"禁止按前缀或通配放行，§3.6-5）"]
+
+
 def verify_v2_declarative_gates(zip_path: Path, m: dict) -> list:
-    """闸门三项总入口；非声明式（v1 bundle 形态）按 §3.5 兼容期直接放行。"""
+    """闸门总入口；非声明式（v1 bundle 形态）按 §3.5 兼容期直接放行。
+
+    顺序与宿主安装流程同序：先三段早检（§3.6-1，缺段即返回，避免被字段级文案淹没），
+    再 `logic.env` 白名单，最后包内 `ui.entry` / `logic.entry` 检查。
+    """
     is_v2 = (m.get("schema") == SCHEMA_V2
              or isinstance(m.get("ui"), dict) or isinstance(m.get("logic"), dict))
     if not is_v2:
         return []
+    errs = verify_required_sections(m)
+    if errs:
+        return errs
+    errs = verify_logic_env(m)
     try:
         with zipfile.ZipFile(zip_path) as zf:
-            return verify_ui_entry(zf, m) + verify_logic_entry(zf, m)
+            return errs + verify_ui_entry(zf, m) + verify_logic_entry(zf, m)
     except (zipfile.BadZipFile, OSError):
         # zip 自身不可读已由 verify_zip_contents 报出，此处避免重复报错
-        return []
+        return errs
 
 
 def verify_product(pdir: Path, index: dict) -> list:

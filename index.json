@@ -63,7 +63,7 @@
       "version": "1.0.0",
       "kind": "product",
       "download_url": "file:///Users/suipu/Library/Application Support/com.tencent.mac.marvis/MarvisData/User/oAN1i2ZBY9RZ_546iTLRNKmp7ZfY/workspace/conv_b04049182ad140308054c752158fff1f/output/acct/acct-perm-1.0.0.zip",
-      "sha256": "c2f081b85e2211c37e63552b5587c4a2e668f440fe1b1cf77f396a4bb52cecb4",
+      "sha256": "ed64d958c74ef49ff803a3bf071ebae9a9b03a90263737dacd2ff9daf7df71fd",
       "size_kb": 11.3
     },
     {
@@ -71,16 +71,16 @@
       "version": "1.0.0",
       "kind": "product",
       "download_url": "file:///Users/suipu/Library/Application Support/com.tencent.mac.marvis/MarvisData/User/oAN1i2ZBY9RZ_546iTLRNKmp7ZfY/workspace/conv_b04049182ad140308054c752158fff1f/output/acct/acct-mem-1.0.0.zip",
-      "sha256": "2920baa517c3a86deca2e9013e968ff96150a0d951e70d50587ea27c315736ea",
-      "size_kb": 10.6
+      "sha256": "8545a1431c34a88e1ab7b4d06c8a05bd275ccd081e2c6541983a17d41dc46269",
+      "size_kb": 10.7
     },
     {
       "name": "acct-flood",
       "version": "1.0.0",
       "kind": "product",
       "download_url": "file:///Users/suipu/Library/Application Support/com.tencent.mac.marvis/MarvisData/User/oAN1i2ZBY9RZ_546iTLRNKmp7ZfY/workspace/conv_b04049182ad140308054c752158fff1f/output/acct/acct-flood-1.0.0.zip",
-      "sha256": "2e44cd762679a802bbca7c9f7841faf8018c06b89fdee1f837b23e7cdc963ec3",
-      "size_kb": 10.3
+      "sha256": "544d775c713e6ff8bda10fe0a4ee17045c9c1503c611a14d0f961fd2c343dc9c",
+      "size_kb": 10.4
     }
   ]
 }

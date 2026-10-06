@@ -464,6 +464,8 @@ AIGC:
 }
 ```
 
+> 注：`logic` 段还须按 §3.3 登记完整性凭据（`sha256` 或 `signature` 二者至少其一），上例省略具体摘要值；`logic.env` 未列举键一律拒装，首批白名单为空集故示例取 `{}`。
+
 ## 3.3 字段表
 
 ### 元数据段
@@ -506,13 +508,15 @@ AIGC:
 | `entry` | string | 是 | — | 逻辑进程可执行文件（包内相对） | 存在 + 可执行位校验；禁止路径逃逸 |
 | `runtime` | string | 否 | `executable` | `executable`（自带可执行）/ `python3`（底座内置解释器） | 枚举外 → 拒绝 |
 | `args` | string[] | 否 | `[]` | 启动参数 | 单参数 ≤256 字符，禁止 shell 元字符 |
-| `env` | object | 否 | `{}` | 额外环境变量 | 键白名单（`SHADELING_*` 保留，禁止覆盖）；值禁止含路径分隔符与凭据样式串 |
+| `env` | object | 否 | `{}` | 额外环境变量 | **显式正列举白名单**（`BrickInstallGate.allowedLogicEnvKeys`，首批为空集 → `logic.env` 必须为空对象）：未列举键**安装期拒装**、运行期不注入；`SHADELING_*` 仍为底座保留（manifest 不得声明，底座自身注入语义不变）；键名格式与值（路径分隔符 / 凭据样式串 / 非字符串）纵深校验保留；**放行具体键须先做「底座 ↔ 契约 §3.3」同步登记，禁止按前缀或通配放行** |
+| `sha256` | string | 条件必填 | — | `logic.entry` 的完整性凭据（哈希登记） | 64 位十六进制；安装期与包内 `logic.entry` 实际字节比对，不一致 → 拒装。与 `signature` **二者至少其一** |
+| `signature` | string | 条件必填 | — | `logic.entry` 的完整性凭据（签名登记） | 须以 `shadeling-sig/v1:` 开头；**仅做格式校验，不做验签**。与 `sha256` **二者至少其一** |
 
-> **补充判定：`logic.entry` 的哈希 / 签名登记字段（2026-10-04 补记，待 owner 确认）**
-> 安装器与发布闸门（§3.6-7 / §7.4 C4）要求 `logic.entry` 在 manifest 中**登记哈希或签名**，登记口径暂定如下：
+> **`logic.entry` 完整性凭据口径（2026-10-06 owner 按建议拍板，取 C；原「2026-10-04 补充判定」转正）**
+> 安装器与发布闸门（§3.6 / §7.4 C4）要求 `logic.entry` 在 manifest 中**登记哈希或签名**，正式口径如下：
 > - `logic.sha256`：64 位十六进制摘要，**推荐**（安装期与包内实际文件比对，不一致则拒绝安装）；
 > - `logic.signature`：以 `shadeling-sig/v1:` 为前缀的签名字符串，**仅做格式校验，不做验签**。
-> 两者至少其一。现状只做「存在性 + 格式（+ `sha256` 一致性）」校验，**真实验签尚未实现**；本段为补充判定，未写入上方 §3.3 正式字段表，**待 owner 确认后方可作为契约正式口径**（对应 Shadeling `specs/state-2026-10-03.md` §12.6-1）。
+> 二者**至少其一存在且格式合法**即通过；二者皆缺 → 拒装并按 §3.6-4 文案报错。**本轮不做真实验签**（真实验签留到对外分发，随付费开发者账号 + 公证一并做）。两处判据同源：宿主 `BrickInstallGate.validateLogicEntryIntegrity` / `logicSHA256Pattern` / `logicSignaturePrefix` 与发布闸门 `verify_products.verify_logic_entry`（`SHA256_RE` / `SIGNATURE_PREFIX`）。（对应 Shadeling `specs/state-2026-10-03.md` §12.6-1 / §16）
 
 ### 权限段 `permissions`
 
@@ -564,17 +568,23 @@ AIGC:
 | `brick-app/v1` 无 `bundle` | 兼容期 | 允许 | 旧声明式五字段积木，维持现状（工坊入口 + 提示词降级） |
 | `brick-app/v2` | ≥ 声明式渲染版本 | 允许 | 内嵌主区域 + 逻辑进程 |
 | `brick-app/v2` | 旧底座 | 拒绝 | 安装器提示「该积木需要新版底座」并给出升级入口 |
+| `brick-app/v2` 缺 `nav` / `ui` / `logic` 任一段 | ≥ 声明式渲染版本 | **拒绝** | 安装期硬卡点：按 §3.6-1 报错，文案区分「整段缺失 / 存在但不是对象」 |
+| `brick-app/v1`（含未标 `schema` 的历史包） | 兼容期 | 允许 | **不强制** `nav` / `ui` / `logic` 三段，按本表上方 v1 两行走 legacy 路径 |
 | `brick-app/v1` + `bundle` | 声明式渲染版本之后（退役期） | 拒绝新装 | 已装实例可继续运行，市场不再上架 |
+
+> **三段硬卡点的适用范围（2026-10-06 owner 按建议拍板，取 A）**：`nav` / `ui` / `logic` 三段强制只作用于 `schema=brick-app/v2`；**v1（含未标 `schema` 的历史包）不强制三段**，兼容期内维持原有校验与运行路径。判据同源：宿主 `BrickInstallGate.requiredSections` / `validateRequiredSections` + 安装流程早检（先于字段级文案，避免被「缺 `nav.view_id`」淹没）与发布闸门 `verify_products.verify_required_sections`（`REQUIRED_SECTIONS`）。
 
 ## 3.6 安装器校验清单（v2 新增项）
 
-1. `schema` / `kind` / `engine` / `protocol` / `runtime` 枚举合法性。
-2. `brick_id` 唯一性与 `version` 单调性（已装同 id 版本比较）。
-3. `ui.entry` 与 `logic.entry` 存在性、可执行位（`logic`）、路径逃逸（`..`、绝对路径、符号链接解析后越界）检查。
-4. 权限枚举合法性（`BrickPermission.isKnown`）+ 高危标红渲染 + 未勾选高危权限则拒绝授予（不影响安装，运行时该能力调用被拒）。
-5. `quota` 区间钳制与记录。
-6. **UI 文档离线预校验**：按第二章规则表校验 `ui.entry` 及引用文档（节点数、深度、类型与属性白名单、图片引用是否包内），失败则拒绝安装并给出具体节点路径。
-7. 发布闸门扩展（`verify_products.py`）：在现有「zip 完整性 / sha256 / manifest 一致性」三项之外，新增「UI 入口存在且可解析」「无裸弹层调用（必须经 `overlay` 节点）」「`logic.entry` 已签名或哈希登记」三项检查（对应模板规格 §3 Phase 3 待加项）。
+1. **（早检）`brick-app/v2` 强制三段**：`nav` / `ui` / `logic` 任一段缺失（含「段存在但不是对象」）→ **安装期硬卡点拒装**，报错文案须区分两种情况，参考文案：`缺少 {nav|ui|logic} 段（整段缺失|存在但不是对象）：brick-app/v2 强制 nav / ui / logic 三段齐备，缺一不可（契约 §3.3）`。本项须在字段级文案之前执行（否则会被「缺 `nav.view_id`」淹没）；**v1（含未标 `schema` 的历史包）不适用本项**（§3.5）。
+2. `schema` / `kind` / `engine` / `protocol` / `runtime` 枚举合法性。
+3. `brick_id` 唯一性与 `version` 单调性（已装同 id 版本比较）。
+4. `ui.entry` 与 `logic.entry` 存在性、可执行位（`logic`）、路径逃逸（`..`、绝对路径、符号链接解析后越界）检查；**`logic.entry` 完整性凭据**：`logic.sha256`（64 位十六进制，与包内入口实际字节比对一致）或 `logic.signature`（前缀 `shadeling-sig/v1:`，仅格式校验）**二者至少其一**，皆缺或格式非法 → 拒装（口径见 §3.3）。
+5. `logic.env` 键白名单校验：仅放行 `BrickInstallGate.allowedLogicEnvKeys` 显式正列举的键（首批为空集 → `logic.env` 必须为空对象），未列举键安装期拒装、运行期不注入；`SHADELING_*` 为底座保留、manifest 不得声明。
+6. 权限枚举合法性（`BrickPermission.isKnown`）+ 高危标红渲染 + 未勾选高危权限则拒绝授予（不影响安装，运行时该能力调用被拒）。
+7. `quota` 区间钳制与记录；**存在钳制项时必弹安装确认页**并逐条展示被钳制项（越界只收紧、不拒装）。
+8. **UI 文档离线预校验**：按第二章规则表校验 `ui.entry` 及引用文档（节点数、深度、类型与属性白名单、图片引用是否包内），失败则拒绝安装并给出具体节点路径。
+9. 发布闸门扩展（`verify_products.py`）：在现有「zip 完整性 / sha256 / manifest 一致性」三项之外，新增四项检查——① `brick-app/v2` 三段（`nav` / `ui` / `logic`）齐备；② `ui.entry` 存在且在包内可解析、无裸弹层调用（必须经 `overlay` 节点）；③ `logic.entry` 已登记哈希或签名（仅格式与一致性校验）；④ `logic.env` 键白名单。`ZIP_MANIFEST_FIELDS` 含 `nav` / `ui` / `logic`；v1（bundle 形态）在兼容期不适用本组检查。发布闸门与宿主安装器**判据同源**（同一份 §3.3 / §3.5 / §3.6 口径）。
 
 ## 3.7 决策基线
 
@@ -1165,6 +1175,22 @@ Content-Length: <字节数>\r\n
 > - 发布闸门（本仓 `scripts/verify_products.py`，+179 行）：声明式（`brick-app/v2`）三项扩展 —— ① `ui.entry` 存在且在包内可解析（§2.2 / §2.3 / §2.7：schema、节点类型白名单、节点 id 文法、节点数 2000 / 深度 16）；② 无裸弹层调用（弹层必须写成 `overlay` 节点 + 子类型，含系统弹层别名拦截）；③ `logic.entry` 已登记哈希或签名（`manifest.logic.sha256` 64 位十六进制，或 `manifest.logic.signature` 前缀 `shadeling-sig/v1:`，仅格式与一致性校验）。`ZIP_MANIFEST_FIELDS` 增补 `nav` / `ui` / `logic`；v1（bundle 形态）在兼容期不适用本组检查。
 > - 验证：`python3 -m unittest discover -s tests` **51 tests OK**（`test_verify_products` 31 + `test_verify` 12 + `test_pack_product` 8）；宿主 `BrickInstallGateTests` 29 例全绿。
 > - 待 owner 定：`logic.entry` 真实验签、`logic.env` 键白名单、`ZIP_MANIFEST_FIELDS` 增补口径与 v2 是否强制 `bundle` / `permissions` 硬卡点。待真机：装包负例验收。
+
+> **契约同步说明（2026-10-06，本仓，随本仓 commit 提交）** —— 承接 Shadeling `specs/state-2026-10-03.md` §16：owner 于 2026-10-06 按建议拍板 **C / A / B / B**（`logic.entry` 取 C、v2 强制段取 A、`logic.env` 取 B、quota 警告 UI 可见取 B），宿主侧代码与单测已落地，本仓按同源判据同步：
+> - §3.3：`logic.env` 由「黑名单描述」改为**显式正列举白名单**（首批为空集 = `logic.env` 必须为空对象；放行具体键须先做「底座 ↔ 契约」同步登记，禁止前缀 / 通配放行）；新增 `logic.sha256` / `logic.signature` 登记字段（二者至少其一，判据 C），原「2026-10-04 补充判定」转正并在 §3.6 校验清单中列为独立注记。
+> - §3.5：兼容矩阵新增「v2 缺 `nav` / `ui` / `logic` 任一 → 拒装」硬卡点行（拍板 A），并补「v1 不强制三段」行。
+> - §3.6：新增第 1 项**三段早检硬卡点**（含文案，且早检先于字段级文案报出）与第 5 项 `logic.env` 白名单；原发布闸门项（四项同源）扩为四项检查说明。
+> - `scripts/verify_products.py`：新增常量 `REQUIRED_SECTIONS` / `ALLOWED_LOGIC_ENV_KEYS` 与 `verify_required_sections` / `verify_logic_env`，并接入 `verify_v2_declarative_gates`（顺序：三段早检 → `logic.env` 白名单 → 包内 `ui.entry` / `logic.entry`）；`ZIP_MANIFEST_FIELDS`（含 `nav` / `ui` / `logic`）与 `SHA256_RE` / `SIGNATURE_PREFIX` 复核确认与宿主判据同源，未变动。
+> - 验证：`python3 -m unittest discover -s tests` **60 tests OK**（原 51 例 + 本次新增 9 例：三段硬卡点 4 / `logic.env` 白名单 5）。
+> - 勾销：§7.4 C4「四项待 owner 定」按 2026-10-06 拍板结论勾销（见下）。
+
+> **§7.4 C4 待定项勾销（2026-10-06 owner 按建议拍板 C / A / B / B）**
+> - ~~`logic.entry` 真实验签~~ → 取 **C：本轮不做**真实验签，仅做登记 + 格式 / 一致性校验；真实验签留到对外分发（随付费开发者账号 + 公证一并做）。
+> - ~~`logic.env` 键白名单~~ → 取 **B：显式正列举**，首批为空集（§3.3 / §3.6-5）。
+> - ~~`ZIP_MANIFEST_FIELDS` 增补口径~~ → 已含 `nav` / `ui` / `logic`，与宿主同源（§3.6-9）。
+> - ~~v2 是否强制 `bundle` / `permissions` 硬卡点~~ → 取 **A：强制 `nav` / `ui` / `logic` 三段**（§3.5 / §3.6-1）；`bundle` 对 v2 不适用，`permissions` 仍按 §5 枚举校验（不做「必须非空」硬卡点）。
+> - 仍待 owner 定（不在本次拍板范围）：市场质量统计通道（§4.10 / §5.3.2 的宿主上报端点 / 鉴权 / 批量口径，见 C2 落地说明）。
+> - 待真机：装包负例验收（C4 五类负例，宿主侧离线预验已在 Shadeling 侧完成）。
 
 **验收标准**
 

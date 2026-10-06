@@ -17,7 +17,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from verify_products import (  # noqa: E402
+    verify_logic_env,
     verify_product,
+    verify_required_sections,
     verify_ui_document,
     verify_v2_declarative_gates,
 )
@@ -74,8 +76,9 @@ def make_product(vault: Path, name="demo", version="1.0.0", manifest=None,
 
 
 # ——————————————————————————————————————————————————————————————
-# C4 声明式（v2）三项闸门用例（2026-10-04 新增）
-#   ① ui.entry 存在且可解析  ② 无裸弹层调用  ③ logic.entry 已签名或哈希登记
+# C4 声明式（v2）闸门用例（2026-10-04 新增；2026-10-06 按 owner 拍板 C/A/B/B 扩至五项）
+#   ① 三段硬卡点 nav/ui/logic（A）  ② ui.entry 存在且可解析  ③ 无裸弹层调用
+#   ④ logic.entry 已签名或哈希登记（C）  ⑤ logic.env 键白名单（B）
 # ——————————————————————————————————————————————————————————————
 
 def ui_doc(root=None):
@@ -112,6 +115,7 @@ def make_v2_manifest(name="demo", version="1.0.0", ui_entry="ui/main.json",
         "author": "Shadeling",
         "summary": "test v2 product",
         "kind": "product",
+        "nav": {"view_id": name, "title": "Demo V2", "icon": "square.grid.2x2", "order": 1},
         "ui": {"entry": ui_entry} if ui_entry else {},
         "logic": logic,
         "permissions": [],
@@ -300,7 +304,66 @@ class VerifyProductsTest(unittest.TestCase):
             m = json.loads((pdir / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(verify_v2_declarative_gates(zip_path, m), [])
 
-    # ① ui.entry 存在且可解析
+    # ① 三段硬卡点 nav / ui / logic（§3.6-1，2026-10-06 owner 拍板 A）
+
+    def test_v2_missing_nav_section(self):
+        with tempfile.TemporaryDirectory() as td:
+            m = make_v2_manifest(logic_sha256="0" * 64)
+            del m["nav"]
+            pdir, index = make_v2_product(Path(td), manifest=m)
+            self.assertTrue(any("缺 nav 段（整段缺失）" in e for e in verify_product(pdir, index)))
+
+    def test_v2_section_present_but_not_object(self):
+        for key in ("nav", "ui", "logic"):
+            with self.subTest(section=key):
+                m = make_v2_manifest(logic_sha256="0" * 64)
+                m[key] = "nope"
+                errs = verify_required_sections(m)
+                self.assertTrue(any(f"缺 {key} 段（存在但不是对象）" in e for e in errs), errs)
+
+    def test_v2_missing_section_reported_before_entry_errors(self):
+        """缺段早检须先于字段级文案报出（与宿主安装流程同序，避免被「缺 nav.view_id」淹没）。"""
+        m = make_v2_manifest(ui_entry=None, logic_entry=None)
+        del m["nav"]
+        errs = verify_v2_declarative_gates(Path("/nonexistent.zip"), m)
+        self.assertEqual(len(errs), 1)
+        self.assertIn("缺 nav 段（整段缺失）", errs[0])
+
+    def test_v1_not_gated_by_required_sections(self):
+        """§3.5 兼容期：v1（含未标 schema 的历史包）不强制三段。"""
+        self.assertEqual(verify_required_sections(make_manifest()), [])
+        unmarked = make_manifest()
+        unmarked.pop("schema")
+        self.assertEqual(verify_required_sections(unmarked), [])
+
+    # ⑤ logic.env 键白名单（§3.3 / §3.6-5，2026-10-06 owner 拍板 B）
+
+    def test_v2_logic_env_empty_passes(self):
+        self.assertEqual(verify_logic_env(make_v2_manifest(logic_sha256="0" * 64)), [])
+
+    def test_v2_logic_env_absent_passes(self):
+        m = make_v2_manifest(logic_sha256="0" * 64)
+        self.assertEqual(verify_logic_env(m), [])
+
+    def test_v2_logic_env_unknown_key_rejected(self):
+        m = make_v2_manifest(logic_sha256="0" * 64)
+        m["logic"]["env"] = {"PATH": "/usr/bin", "SHADELING_TMP": "/tmp"}
+        errs = verify_logic_env(m)
+        self.assertTrue(any("未登记键" in e and "PATH" in e for e in errs), errs)
+
+    def test_v2_logic_env_unknown_key_fails_in_product(self):
+        with tempfile.TemporaryDirectory() as td:
+            m = make_v2_manifest(logic_sha256="0" * 64)
+            m["logic"]["env"] = {"HOME": "/Users/x"}
+            pdir, index = make_v2_product(Path(td), manifest=m)
+            self.assertTrue(any("未登记键" in e for e in verify_product(pdir, index)))
+
+    def test_v2_logic_env_non_object_rejected(self):
+        m = make_v2_manifest(logic_sha256="0" * 64)
+        m["logic"]["env"] = []
+        self.assertTrue(any("必须是对象" in e for e in verify_logic_env(m)))
+
+    # ② ui.entry 存在且可解析
 
     def test_v2_missing_ui_section(self):
         with tempfile.TemporaryDirectory() as td:
