@@ -253,8 +253,7 @@
           "level": "info",
           "visible": "{{state.banner_is_info}}",
           "text": "{{state.banner}}"
-        },
-        "subtype": "banner"
+        }
       },
       {
         "type": "overlay",
@@ -264,8 +263,7 @@
           "level": "warning",
           "visible": "{{state.banner_is_warn}}",
           "text": "{{state.banner}}"
-        },
-        "subtype": "banner"
+        }
       },
       {
         "type": "text",
@@ -374,8 +372,7 @@
               }
             ]
           }
-        },
-        "subtype": "sheet"
+        }
       },
       {
         "type": "overlay",
@@ -539,8 +536,7 @@
               }
             ]
           }
-        },
-        "subtype": "sheet"
+        }
       },
       {
         "type": "overlay",
@@ -771,8 +767,7 @@
               }
             ]
           }
-        },
-        "subtype": "sheet"
+        }
       },
       {
         "type": "overlay",
@@ -789,8 +784,7 @@
         "on": {
           "confirm": "confirm_delete",
           "cancel": "cancel_delete"
-        },
-        "subtype": "dialog"
+        }
       }
     ]
   }

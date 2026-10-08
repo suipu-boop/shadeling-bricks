@@ -3,7 +3,7 @@
 # 本地构建 + 打包 WeChatMP.app + 生成发布 zip 与 sha256。
 #
 # 用法（二选一）：
-#   cd products/wechat-mp/source && bash package_app.sh            # 默认版本 1.1.0
+#   cd products/wechat-mp/source && bash package_app.sh            # 默认版本 1.1.1
 #   cd products/wechat-mp/source && bash package_app.sh 1.1.1      # 指定版本
 #
 # 前置：Shadeling 仓需位于 ~/Dev/Shadeling（BrickUIKit 为跨仓本地 SPM 依赖，缺失即 abort）。
@@ -18,7 +18,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 VAULT_DIR="$(cd "${ROOT_DIR}/../.." && pwd)"
-VERSION="${1:-1.0.0}"
+VERSION="${1:-1.1.1}"
 
 PRODUCT="wechat-mp"
 BUNDLE_NAME="WeChatMP.app"

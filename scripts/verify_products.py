@@ -16,6 +16,13 @@ products/<id>/ 发布前强制自检：
    - `logic.entry` 已登记哈希或签名（`manifest.logic.sha256` 或 `manifest.logic.signature`）
    - `logic.env` 键白名单（显式正列举，首批为空集 = `logic.env` 必须为空对象，§3.6-5）
    非 `brick-app/v2`（v1 / 未标 schema 的历史包）按 §3.5 兼容期不适用本组检查。
+7. **版本一致性闸门（E1.1）**：`manifest.version` 必须与仓库 `source/Info.plist`、
+   发布 zip 内入口 bundle 的 `Contents/Info.plist` 的 `CFBundleShortVersionString` 一致
+   （历史坑：wechat-mp 的 Info.plist 停在 1.0.0 而 manifest 已到 1.1.0，装出来的版本对不上）
+   适用口径：仅 v1（声明了 `bundle` 的 app 形态）产品；v2 声明式积木不发布 .app，不校验源码 plist
+8. **权限段台账闸门（E1.1）**：`manifest.permission_risks`（若声明）须与 `permissions` 双向一致：
+   declared 项必须在 `permissions` 内，pending / resolved 项必须在 `permissions` 外，
+   且 `level ∈ {low, mid, high, app-level}`、`status ∈ {declared, pending, resolved}`
 
 契约权威：specs/brick-market-v2.md（brick-app/v1 manifest）、
 specs/Shadeling积木声明式UI架构设计与契约-v0.1.md §2 / §3.6 / §7.4
@@ -28,6 +35,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import plistlib
 import re
 import sys
 import zipfile
@@ -72,6 +80,11 @@ SIGNATURE_PREFIX = "shadeling-sig/v1:"
 REQUIRED_SECTIONS = ("nav", "ui", "logic")
 # §3.3 / §3.6-5（2026-10-06 owner 拍板 B）：logic.env 显式正列举白名单，首批为空集
 ALLOWED_LOGIC_ENV_KEYS: frozenset = frozenset()
+
+# —— E1.1 闸门常量：版本一致性 + 权限段台账（permission_risks）——
+PLIST_VERSION_KEY = "CFBundleShortVersionString"    # 与 manifest.version 对齐的 plist 键
+RISK_LEVELS = ("low", "mid", "high", "app-level")   # 级别口径同宿主 BrickPermission.level
+RISK_STATUSES = ("declared", "pending", "resolved")  # 落地状态：已声明 / 待落地 / 核查后无需声明
 
 
 class VerifyError(ValueError):
@@ -169,7 +182,7 @@ def _walk_ui_node(node, depth: int, path: str, state: dict, errs: list) -> None:
     ntype = node.get("type")
     if ntype in BARE_OVERLAY_TYPES:
         errs.append(f"裸弹层调用：{path} 的 type={ntype!r} 非法，弹层必须写成 overlay 节点 "
-                    f"（overlay.subtype ∈ {sorted(OVERLAY_SUBTYPES)}，§2.5-9）")
+                    f"（overlay.kind ∈ {sorted(OVERLAY_SUBTYPES)}，§2.5-9）")
     elif ntype not in UI_NODE_TYPES:
         errs.append(f"UI 节点类型不在白名单：{path} 的 type={ntype!r}（§2.3：未知类型整帧拒绝）")
 
@@ -179,9 +192,14 @@ def _walk_ui_node(node, depth: int, path: str, state: dict, errs: list) -> None:
 
     if ntype == "overlay":
         props = node.get("props") if isinstance(node.get("props"), dict) else {}
-        sub = node.get("subtype", props.get("subtype"))
-        if sub not in OVERLAY_SUBTYPES:
-            errs.append(f"overlay 节点子类型非法：{path} 的 subtype={sub!r}"
+        # 载体口径统一为 props.kind（契约 §2.5-9；与 Swift UIDocumentValidator.validateOverlay 同源）。
+        # 顶层 `subtype` 为历史写法，不再作为判据（遗留包内出现不报错）。
+        kind = props.get("kind")
+        if kind is None:
+            errs.append(f"overlay 节点缺子类载体 props.kind：{path}"
+                        f"（须为 {sorted(OVERLAY_SUBTYPES)} 之一，§2.5-9）")
+        elif kind not in OVERLAY_SUBTYPES:
+            errs.append(f"overlay 节点子类型非法：{path} 的 props.kind={kind!r}"
                         f"（须为 {sorted(OVERLAY_SUBTYPES)} 之一，§2.5-9）")
 
     children = node.get("children")
@@ -312,6 +330,110 @@ def verify_v2_declarative_gates(zip_path: Path, m: dict) -> list:
         return errs
 
 
+def _plist_short_version(data: bytes):
+    """取 Info.plist 的 CFBundleShortVersionString；解析失败抛 VerifyError，取不到版本号返回 None。"""
+    try:
+        pl = plistlib.loads(data)
+    except Exception as e:  # plistlib 异常类型随内容而异（XML / 二进制 / 编码）
+        raise VerifyError(f"Info.plist 解析失败：{e}") from e
+    value = pl.get(PLIST_VERSION_KEY) if isinstance(pl, dict) else None
+    return value if isinstance(value, str) and value else None
+
+
+def verify_version_consistency(pdir: Path, m: dict, zip_path: Path) -> list:
+    """闸门（E1.1）：`manifest.version` 必须与各处 Info.plist 的 CFBundleShortVersionString 一致。
+
+    覆盖两处：仓库源码 `source/Info.plist`（出包输入）与发布 zip 内入口 bundle 的
+    `Contents/Info.plist`（用户实际装到的版本）。历史坑：wechat-mp 的 Info.plist 长期停在
+    1.0.0 而 manifest 已到 1.1.0，安装后系统「关于」版本与市场登记版本对不上。
+    口径：只校验 v1（声明了 `bundle` 的 app 形态）产品——v2 声明式积木不发布 .app，
+    `source/Info.plist` 不在发布物内（如 vault 的遗留打包脚本残件），不参与核对、不误报。
+    不存在的 plist 跳过；存在但取不到版本号即报错。
+    """
+    errs = []
+    ver = m.get("version") or ""
+
+    src = pdir / "source" / "Info.plist"
+    if m.get("bundle") and src.exists():
+        try:
+            got = _plist_short_version(src.read_bytes())
+        except VerifyError as e:
+            errs.append(f"source/Info.plist 无法核对版本：{e}")
+        else:
+            if got is None:
+                errs.append(f"source/Info.plist 缺 {PLIST_VERSION_KEY}，无法与 manifest 版本核对")
+            elif got != ver:
+                errs.append(f"版本不一致：manifest.version={ver!r}，"
+                            f"source/Info.plist {PLIST_VERSION_KEY}={got!r}")
+
+    bundle = m.get("bundle") or ""
+    if bundle:
+        try:
+            with zipfile.ZipFile(zip_path) as zf:
+                member = f"{bundle}/Contents/Info.plist"
+                if member in set(zf.namelist()):
+                    try:
+                        got = _plist_short_version(zf.read(member))
+                    except VerifyError as e:
+                        errs.append(f"zip 内 {member} 无法核对版本：{e}")
+                    else:
+                        if got is None:
+                            errs.append(f"zip 内 {member} 缺 {PLIST_VERSION_KEY}")
+                        elif got != ver:
+                            errs.append(f"版本不一致：manifest.version={ver!r}，"
+                                        f"zip 内 {member} {PLIST_VERSION_KEY}={got!r}")
+        except (zipfile.BadZipFile, OSError):
+            pass  # zip 不可读已由 verify_zip_contents 报出，此处不重复报错
+    return errs
+
+
+def verify_permission_risks(m: dict) -> list:
+    """闸门（E1.1）：权限段台账 `permission_risks` 与 `permissions` 双向一致。
+
+    台账为 E1.1 引入的权限清单（逐项标风险级别 + 落地状态），供 Phase E 迁移期对照；
+    未声明该键的产品跳过本闸门。级别 / 状态口径见盘点报告 §4 与宿主 `BrickPermission.level`。
+    """
+    rows = m.get("permission_risks")
+    if rows is None:
+        return []
+    if not isinstance(rows, list):
+        return [f"permission_risks 必须是数组，当前：{type(rows).__name__}"]
+
+    errs = []
+    perms = [p for p in (m.get("permissions") or []) if isinstance(p, str)]
+    seen: dict = {}
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            errs.append(f"permission_risks[{i}] 必须是对象")
+            continue
+        name = row.get("permission")
+        if not isinstance(name, str) or not name:
+            errs.append(f"permission_risks[{i}] 缺 permission（权限名 / 待评审能力名）")
+            continue
+        if name in seen:
+            errs.append(f"permission_risks 重复登记：{name}（第 {seen[name]} 项与第 {i} 项）")
+            continue
+        seen[name] = i
+        level, status = row.get("level"), row.get("status")
+        if level not in RISK_LEVELS:
+            errs.append(f"permission_risks[{name}] level 非法：{level!r}"
+                        f"（须为 {list(RISK_LEVELS)} 之一）")
+        if status not in RISK_STATUSES:
+            errs.append(f"permission_risks[{name}] status 非法：{status!r}"
+                        f"（须为 {list(RISK_STATUSES)} 之一）")
+            continue
+        declared = name in perms
+        if status == "declared" and not declared:
+            errs.append(f"permission_risks[{name}] 标 declared 但未写入 permissions（台账与声明脱钩）")
+        elif status != "declared" and declared:
+            errs.append(f"permission_risks[{name}] 标 {status} 却出现在 permissions 里"
+                        f"（pending / resolved 项不得声明；未知 agent.* / ui.* 等会被安装期未知值闸门拒装）")
+    for p in perms:
+        if p not in seen:
+            errs.append(f"permissions 内的 {p!r} 未在 permission_risks 登记（E1.1 要求逐项标风险级别）")
+    return errs
+
+
 def verify_product(pdir: Path, index: dict) -> list:
     errs = []
     mid = pdir.name
@@ -334,6 +456,7 @@ def verify_product(pdir: Path, index: dict) -> list:
         errs.append(f"name 与目录名不一致：manifest={m.get('name')!r}，目录={mid!r}")
     if m.get("kind") != "product":
         errs.append(f"kind 必须为 product，当前：{m.get('kind')!r}")
+    errs.extend(verify_permission_risks(m))
     raw_id = m.get(identity_key, "")
     if not str(raw_id).startswith("com.shadeling.brick."):
         errs.append(f"{identity_key} 非法：{raw_id!r}（应以 com.shadeling.brick. 开头）")
@@ -349,6 +472,7 @@ def verify_product(pdir: Path, index: dict) -> list:
         if actual != declared:
             errs.append(f"sha256 不一致：zip={actual}，manifest={declared}")
         errs.extend(verify_zip_contents(zip_path, m))
+        errs.extend(verify_version_consistency(pdir, m, zip_path))
         errs.extend(verify_v2_declarative_gates(zip_path, m))
 
     entries = index.get("products") or []

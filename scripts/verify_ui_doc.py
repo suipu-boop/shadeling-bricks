@@ -64,7 +64,9 @@ PROPS = {
 }
 
 FORM_FIELD_KEYS = {"field_id", "kind", "label", "placeholder", "value", "options", "mode", "error",
-                   "required", "disabled"}
+                   "required", "disabled", "mono"}
+# 仅 `textarea` 可用的字段键（对齐 UIDocument.swift `BrickFormFieldKeys.textareaOnly`，E1 前置 T4）
+TEXTAREA_ONLY_FIELD_KEYS = ("mono",)
 CARD_ACTION_KEYS = {"label", "action", "style"}
 
 EVENTS = {
@@ -109,6 +111,8 @@ ICON_WHITELIST = {
     "list.bullet", "square.grid.2x2", "chart.bar", "chart.pie", "tablecells",
     "externaldrive", "internaldrive", "externaldrive.badge.icloud",
     "person", "person.fill", "person.2", "person.2.fill", "person.crop.circle",
+    # E1 前置 T3：随 Swift `BrickIconWhitelist` 同步补齐（wechat-mp 页签图标）
+    "tray", "photo.on.rectangle.angled",
 }
 
 
@@ -183,7 +187,11 @@ def check_node(node, path, issues, seen, depth=1):
         return
 
     for key in node:
-        if key not in ("type", "id", "props", "children", "if", "on"):
+        if key in ("type", "id", "props", "children", "if", "on"):
+            continue
+        if key == "subtype":
+            issues.add(path, "已废弃节点键 `subtype`：overlay 子类载体统一为 `props.kind`（§2.5-9），请删除顶层 subtype")
+        else:
             issues.add(path, "未知节点键：`%s`" % key)
 
     type_name = node.get("type")
@@ -384,6 +392,12 @@ def _check_props(type_name, props, path, issues):
                 kind = field.get("kind")
                 if kind not in ENUMS["form_kind"]:
                     issues.add(spot, "kind 非法（白名单：%s）：`%s`" % (" / ".join(ENUMS["form_kind"]), kind))
+                for key in TEXTAREA_ONLY_FIELD_KEYS:
+                    if key in field:
+                        if kind != "textarea":
+                            issues.add(spot, "键 `%s` 仅 textarea 可用（当前 kind=%s）" % (key, kind))
+                        elif not isinstance(field.get(key), bool):
+                            issues.add(spot, "键 `%s` 必须为 bool" % key)
                 if field.get("label") is not None:
                     _check_string(field.get("label"), spot + ".label", issues)
                 if field.get("value") is not None:

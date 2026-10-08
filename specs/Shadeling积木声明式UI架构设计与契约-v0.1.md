@@ -2,12 +2,14 @@
 AIGC:
     Label: "1"
     ContentProducer: 001191440300708461136T1XGW3
-    ProduceID: 1ff3ab34626ddcd667748776b4e29487_a7c10793bfd511f1884b525400cd780f
-    ReservedCode1: 0AP5WEW7TJHvIRs//XUkCAXd1aq6DOq8P0Jgrxx1Hn2VpDk+nnmwMgGNJ58hi30SVXA5lArCL5J/c7HdXpJTRw3fz4rTWZfWs3iQMt56njy0YRItR7uKKNkxOotGTRtGz8tv/ZXJDnHqFRYJRqDd8NX/UWcc0fXErQoTfMIoMPMLgzPxpnpzV5W2JvY=
+    ProduceID: 1ff3ab34626ddcd667748776b4e29487_4316f6d2c31911f1884b525400cd780f
+    ReservedCode1: gqLi9cKxBtViWtsVUGj9uO3QPklt2quHpQtVi+dqXz/NHAJvxswpieTwHGMcYqX/83dkJF5rxjOE7qdRu9iRqNv1jjCOk2dgAEOB+wvKMg7/Or6b2T9YjYALDgw1wLXlu1D6B/qPQ4nR0KygZodhKFg8dwO9ZAqlJycSZG2FzUqVzEmqsBFUj4aN4j4=
     ContentPropagator: 001191440300708461136T1XGW3
-    PropagateID: 1ff3ab34626ddcd667748776b4e29487_a7c10793bfd511f1884b525400cd780f
-    ReservedCode2: 0AP5WEW7TJHvIRs//XUkCAXd1aq6DOq8P0Jgrxx1Hn2VpDk+nnmwMgGNJ58hi30SVXA5lArCL5J/c7HdXpJTRw3fz4rTWZfWs3iQMt56njy0YRItR7uKKNkxOotGTRtGz8tv/ZXJDnHqFRYJRqDd8NX/UWcc0fXErQoTfMIoMPMLgzPxpnpzV5W2JvY=
+    PropagateID: 1ff3ab34626ddcd667748776b4e29487_4316f6d2c31911f1884b525400cd780f
+    ReservedCode2: gqLi9cKxBtViWtsVUGj9uO3QPklt2quHpQtVi+dqXz/NHAJvxswpieTwHGMcYqX/83dkJF5rxjOE7qdRu9iRqNv1jjCOk2dgAEOB+wvKMg7/Or6b2T9YjYALDgw1wLXlu1D6B/qPQ4nR0KygZodhKFg8dwO9ZAqlJycSZG2FzUqVzEmqsBFUj4aN4j4=
 ---
+
+
 
 
 
@@ -155,7 +157,7 @@ AIGC:
 |---|---|---|---|
 | 窗口与 UI | 自开窗口 | 仅主区域 | 渲染器（无窗口 API 暴露） |
 | 网络 | 直连（应用级 `network` 声明） | **不可直连** | `agent.web`（联网检索，只读抓取） |
-| 文件系统 | 直连（用户级权限） | 仅积木私有数据目录 | 私有目录直读写；其他路径需 `agent.fs.read` 或新增 `fs.pick` |
+| 文件系统 | 直连（用户级权限） | 仅积木私有数据目录 | 私有目录直读写；其他路径需 `agent.fs.read` 或新增 `fs.pick`；`fs.pick` 返回的路径视为该次会话内用户已授权（E1 前置 T1，2026-10-08）：逻辑进程可直接读取其内容，读取范围不得超出所选路径，越界读仍计违规并审计 |
 | 浏览器 / 本机界面 | 可（Accessibility） | **默认拒绝** | `agent.browser` / `agent.local`（高危，安装时标红） |
 | 主模型 | 经桥 | 经闸门 | `agent.chat`（无工具） |
 | 系统通知 / 剪贴板 | 可 | 默认拒绝 | 新增 `notify` / `ui.clipboard.write`（见第五章） |
@@ -231,6 +233,7 @@ AIGC:
 ### 样式与布局规则
 
 - **样式只允许引用令牌**：颜色 / 字号 / 间距 / 圆角 / 阴影一律使用令牌名（如 `text.primary`、`surface.card`、`space.md`、`radius.md`），不接受自由色值、字号数值、渐变。
+- **三级前景降级口径（E1 前置 T2，2026-10-08）**：颜色令牌表不含 `text.tertiary`；原设计的第三级前景（列表 meta、次要说明等）一律降级为 `text.secondary`，不新增令牌（`surface.inset` 是背景色，不可用于前景）。
 - **布局原语**：`container(direction/gap/padding/align/size)`、`grid(columns/min_column_width/gap)`、`scroll(axis)`、`spacer`；尺寸取值 `hug` / `fill` / 数值 pt。
 - **禁止项**：绝对定位、z-index 叠层、自定义绘制、动画时间线、变换矩阵。
 
@@ -255,6 +258,8 @@ AIGC:
 事件信封统一携带 `ui_state`（瞬时 UI 状态回传：`focused_id`、`scroll_y`、`draft_text`），供逻辑进程在重渲染后恢复焦点与滚动。
 
 **无双向绑定**：输入框显示值由 `state` 决定；用户输入先在渲染器本地缓存，`change` / `submit` 时上报，逻辑进程更新 state 后以新快照覆盖。
+
+**去抖归属（E1 前置 T5，2026-10-08）**：渲染器**不做**任何去抖 / 节流，输入每次变化即时上抛 `change`（受全局 30 次/秒额度约束，超额丢弃 + `4306`）；高频输入的合并与去抖由**逻辑进程**负责（建议 250~300 ms 窗口 + 单飞），搜索类输入尤其如此。
 
 ## 2.5 首批组件清单（能力边界）
 
@@ -308,8 +313,8 @@ AIGC:
 | 项 | 内容 |
 |---|---|
 | 子类型 | `field`(单行输入)、`textarea`(多行)、`picker`(下拉/分段/日期，`mode=menu/segment/date`)、`toggle`、`checkbox`、`secret`(掩码输入) |
-| 关键 props | `field_id`、`label`、`placeholder`、`value`(插值)、`options`、`error`(错误文案)、`required`、`disabled` |
-| 事件 | `change`、`submit` |
+| 关键 props | `field_id`、`label`、`placeholder`、`value`(插值)、`options`、`error`(错误文案)、`required`、`disabled`；`mono`(bool，仅 `textarea`，等宽输入，E1 前置 T4) |
+| 事件 | `change`、`submit`；`textarea` 逐次输入即上抛 `change`（E1 前置 T5） |
 | 支持 | 常见表单、字段级错误提示（文案由逻辑进程返回）、必填标记、日期选择（`picker mode=date`） |
 | **不支持** | 富文本编辑、Markdown 实时预览、自动完成/联想下拉、多文件上传控件、字段联动计算（联动由逻辑进程重渲染实现）、输入掩码与正则即时校验 |
 
@@ -318,7 +323,7 @@ AIGC:
 | 项 | 内容 |
 |---|---|
 | 关键 props | `name`、`size`(sm/md/lg)、`color`(令牌) |
-| 支持 | SF Symbols 白名单子集 + 底座内置图标集；与文字并排 |
+| 支持 | SF Symbols 白名单子集 + 底座内置图标集；与文字并排；白名单 E1 前置（2026-10-08，T3）增补 2 个：`tray`、`photo.on.rectangle.angled` |
 | **不支持** | 自定义 SVG / 位图图标、多色图标、图标动画 |
 
 ### 8. progress
@@ -337,6 +342,8 @@ AIGC:
 | `dialog` | 确认对话框（沿用 `.brickConfirm` 契约） | `title`、`message`、`confirm_label`、`cancel_label`、`danger` |
 | `banner` | 顶部横幅（沿用 `BrickBanner` 契约） | `text`、`level`(info/success/warning/error)、`auto_dismiss_ms` |
 | `toast` | 轻提示 | `text`、`duration_ms` |
+
+**子类载体（E1 收口，2026-10-08）**：子类型一律写在 `props.kind`（上表四个取值），节点**顶层** `subtype` 键已废弃——`verify_ui_doc.py` 将顶层 `subtype` 判为错误（唯一载体口径），`verify_products.py` 亦只认 `props.kind`；存量冗余已清理（`products/vault/ui/main.json` 6 处）。
 
 | 项 | 内容 |
 |---|---|
@@ -1429,5 +1436,6 @@ Content-Length: <字节数>\r\n
 | G3 | 不为迁移而放宽隔离红线（不放行任意脚本 / 远程加载） | 受限节点须单独安全评审，不得以"迁移便利"为由降低标准 |
 | G4 | 上传类写能力按高危处理 | 写操作影响面大于只读抓取，须标红并二次确认 |
 | G5 | 混合形态仅作过渡，设明确终态期限 | 与第六章兼容期上限 2 个小版本一致 |
+*（内容由AI生成，仅供参考）*
 *（内容由AI生成，仅供参考）*
 *（内容由AI生成，仅供参考）*

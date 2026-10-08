@@ -1,0 +1,1290 @@
+{
+  "schema": "shadeling-ui/1",
+  "version": 1,
+  "state_snapshot": {
+    "page": "账号",
+    "page_label": "账号",
+    "is_account": true,
+    "is_composer": false,
+    "is_media": false,
+    "is_drafts": false,
+    "is_publish": false,
+    "busy": false,
+    "notice_text": "就绪",
+    "notice_is_error": false,
+    "toast_visible": false,
+    "toast_text": "已复制",
+    "account_complete": false,
+    "account_incomplete": true,
+    "account_testing": false,
+    "app_id": "",
+    "secret": "",
+    "store_path": "",
+    "account_report_present": false,
+    "account_report": "",
+    "theme": "松绿",
+    "theme_summary": "绿色强调，标题带竖线，适合资讯 / 技术分享",
+    "markdown_source": "",
+    "preview_lines": "",
+    "meta_hint_present": false,
+    "meta_hint": "",
+    "payload_title": "",
+    "payload_author": "",
+    "payload_digest": "",
+    "cover_value": "未选择（必填）",
+    "link_value": "",
+    "show_cover_pic": true,
+    "need_open_comment": false,
+    "only_fans_can_comment": false,
+    "assets_count": 0,
+    "assets": [],
+    "upload_blocked": true,
+    "drafts_count": 0,
+    "drafts": [],
+    "drafts_refreshing": false,
+    "confirm_delete": false,
+    "delete_target_title": "",
+    "publish_unknown": true,
+    "publish_probing": false,
+    "publish_granted": false,
+    "publish_denied": false,
+    "publish_reason_present": false,
+    "publish_reason": "",
+    "publish_target": "未选择",
+    "publish_id": "",
+    "publish_status_present": false,
+    "publish_status": "",
+    "publish_busy": false
+  },
+  "root": {
+    "type": "container",
+    "id": "root",
+    "props": {
+      "direction": "vertical",
+      "gap": 12,
+      "padding": 16
+    },
+    "children": [
+      {
+        "type": "container",
+        "id": "header",
+        "props": {
+          "direction": "horizontal",
+          "gap": 12,
+          "align": "center"
+        },
+        "children": [
+          {
+            "type": "text",
+            "id": "app_title",
+            "props": {
+              "value": "微信公众号",
+              "style": "title"
+            }
+          },
+          {
+            "type": "text",
+            "id": "page_label",
+            "props": {
+              "value": "{{state.page_label}}",
+              "style": "caption",
+              "color": "text.secondary"
+            }
+          },
+          {
+            "type": "button",
+            "id": "btn_refresh_drafts",
+            "props": {
+              "label": "刷新草稿",
+              "style": "ghost",
+              "icon": "arrow.clockwise",
+              "busy": "{{state.drafts_refreshing}}"
+            },
+            "on": {
+              "tap": "refresh_drafts"
+            }
+          }
+        ]
+      },
+      {
+        "type": "container",
+        "id": "nav",
+        "props": {
+          "direction": "vertical",
+          "gap": 8
+        },
+        "children": [
+          {
+            "type": "form",
+            "id": "nav_form",
+            "props": {
+              "fields": [
+                {
+                  "field_id": "page",
+                  "kind": "picker",
+                  "mode": "segment",
+                  "label": "页面",
+                  "options": ["账号", "编辑", "素材", "草稿", "发布"],
+                  "value": "{{state.page}}"
+                }
+              ]
+            },
+            "on": {
+              "change": "page_change"
+            }
+          },
+          {
+            "type": "container",
+            "id": "nav_icons",
+            "props": {
+              "direction": "horizontal",
+              "gap": 10,
+              "align": "center"
+            },
+            "children": [
+              {
+                "type": "icon",
+                "id": "nav_icon_account",
+                "props": {
+                  "name": "person.crop.circle",
+                  "size": "md"
+                },
+                "if": "state.is_account"
+              },
+              {
+                "type": "icon",
+                "id": "nav_icon_composer",
+                "props": {
+                  "name": "square.and.pencil",
+                  "size": "md"
+                },
+                "if": "state.is_composer"
+              },
+              {
+                "type": "icon",
+                "id": "nav_icon_media",
+                "props": {
+                  "name": "photo.on.rectangle.angled",
+                  "size": "md"
+                },
+                "if": "state.is_media"
+              },
+              {
+                "type": "icon",
+                "id": "nav_icon_drafts",
+                "props": {
+                  "name": "tray",
+                  "size": "md"
+                },
+                "if": "state.is_drafts"
+              },
+              {
+                "type": "icon",
+                "id": "nav_icon_publish",
+                "props": {
+                  "name": "paperplane",
+                  "size": "md"
+                },
+                "if": "state.is_publish"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "container",
+        "id": "notice_bar",
+        "props": {
+          "direction": "horizontal",
+          "gap": 10,
+          "padding": 10,
+          "align": "center",
+          "card_style": "card"
+        },
+        "children": [
+          {
+            "type": "progress",
+            "id": "notice_progress",
+            "props": {
+              "style": "spinner"
+            },
+            "if": "state.busy"
+          },
+          {
+            "type": "text",
+            "id": "notice_text_error",
+            "props": {
+              "value": "{{state.notice_text}}",
+              "style": "body",
+              "lines": 3,
+              "color": "danger"
+            },
+            "if": "state.notice_is_error"
+          },
+          {
+            "type": "text",
+            "id": "notice_text_normal",
+            "props": {
+              "value": "{{state.notice_text}}",
+              "style": "body",
+              "lines": 3,
+              "color": "text.secondary"
+            },
+            "if": "!state.notice_is_error"
+          },
+          {
+            "type": "button",
+            "id": "btn_copy_notice",
+            "props": {
+              "label": "复制提示",
+              "style": "ghost",
+              "size": "sm",
+              "icon": "square.and.arrow.up"
+            },
+            "on": {
+              "tap": "copy_notice"
+            }
+          }
+        ]
+      },
+      {
+        "type": "container",
+        "id": "page_account",
+        "props": {
+          "direction": "vertical",
+          "gap": 12
+        },
+        "if": "state.is_account",
+        "children": [
+          {
+            "type": "container",
+            "id": "account_cred_card",
+            "props": {
+              "direction": "vertical",
+              "gap": 10,
+              "padding": 14,
+              "card_style": "card"
+            },
+            "children": [
+              {
+                "type": "text",
+                "id": "account_cred_title",
+                "props": {
+                  "value": "公众号凭据",
+                  "style": "heading"
+                }
+              },
+              {
+                "type": "form",
+                "id": "account_form",
+                "props": {
+                  "submit_label": "保存凭据",
+                  "fields": [
+                    {
+                      "field_id": "app_id",
+                      "kind": "field",
+                      "label": "AppID",
+                      "placeholder": "wx 开头的 18 位字符",
+                      "value": "{{state.app_id}}"
+                    },
+                    {
+                      "field_id": "app_secret",
+                      "kind": "secret",
+                      "label": "AppSecret",
+                      "placeholder": "仅本机存储（0600）",
+                      "value": "{{state.secret}}"
+                    }
+                  ]
+                },
+                "on": {
+                  "change": "account_change",
+                  "submit": "save_credentials"
+                }
+              },
+              {
+                "type": "container",
+                "id": "account_actions",
+                "props": {
+                  "direction": "horizontal",
+                  "gap": 10
+                },
+                "children": [
+                  {
+                    "type": "button",
+                    "id": "btn_save_credentials",
+                    "props": {
+                      "label": "保存凭据",
+                      "style": "primary"
+                    },
+                    "on": {
+                      "tap": "save_credentials"
+                    }
+                  },
+                  {
+                    "type": "button",
+                    "id": "btn_test_connection",
+                    "props": {
+                      "label": "测试连接",
+                      "style": "secondary",
+                      "disabled": "{{state.account_incomplete}}"
+                    },
+                    "on": {
+                      "tap": "test_connection"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "progress",
+                "id": "account_testing_spinner",
+                "props": {
+                  "style": "spinner",
+                  "label": "正在测试连接…"
+                },
+                "if": "state.account_testing"
+              }
+            ]
+          },
+          {
+            "type": "container",
+            "id": "account_store_card",
+            "props": {
+              "direction": "vertical",
+              "gap": 10,
+              "padding": 14,
+              "card_style": "card"
+            },
+            "children": [
+              {
+                "type": "text",
+                "id": "account_store_title",
+                "props": {
+                  "value": "存储位置与三步检测报告",
+                  "style": "heading"
+                }
+              },
+              {
+                "type": "text",
+                "id": "account_store_path",
+                "props": {
+                  "value": "存储位置（权限 0600，仅当前用户可读写）：{{state.store_path}}",
+                  "style": "caption",
+                  "lines": 2,
+                  "truncate": "middle",
+                  "color": "text.secondary"
+                }
+              },
+              {
+                "type": "button",
+                "id": "btn_copy_store_path",
+                "props": {
+                  "label": "复制路径",
+                  "style": "ghost",
+                  "size": "sm",
+                  "icon": "square.and.arrow.up"
+                },
+                "on": {
+                  "tap": "copy_store_path"
+                }
+              },
+              {
+                "type": "text",
+                "id": "account_report",
+                "props": {
+                  "value": "{{state.account_report}}",
+                  "style": "body",
+                  "lines": 14,
+                  "mono": true
+                },
+                "if": "state.account_report_present"
+              },
+              {
+                "type": "button",
+                "id": "btn_copy_report",
+                "props": {
+                  "label": "复制检测报告",
+                  "style": "ghost",
+                  "size": "sm",
+                  "icon": "square.and.arrow.up"
+                },
+                "if": "state.account_report_present",
+                "on": {
+                  "tap": "copy_account_report"
+                }
+              }
+            ]
+          },
+          {
+            "type": "container",
+            "id": "account_tips_card",
+            "props": {
+              "direction": "vertical",
+              "gap": 6,
+              "padding": 14,
+              "card_style": "card"
+            },
+            "children": [
+              {
+                "type": "text",
+                "id": "account_tips_title",
+                "props": {
+                  "value": "后台配置要点",
+                  "style": "heading"
+                }
+              },
+              {
+                "type": "text",
+                "id": "account_tip_1",
+                "props": {
+                  "value": "• 在「微信公众平台 → 设置与开发 → 基本配置」获取 AppID 与 AppSecret。",
+                  "style": "body",
+                  "lines": 2
+                }
+              },
+              {
+                "type": "text",
+                "id": "account_tip_2",
+                "props": {
+                  "value": "• 将本机出口 IP 加入「IP 白名单」，否则接口会返回 40164。",
+                  "style": "body",
+                  "lines": 2
+                }
+              },
+              {
+                "type": "text",
+                "id": "account_tip_3",
+                "props": {
+                  "value": "• 「发布能力（freepublish）」为接口权限包能力，未开通时只能用草稿箱。",
+                  "style": "body",
+                  "lines": 2
+                }
+              },
+              {
+                "type": "text",
+                "id": "account_tip_4",
+                "props": {
+                  "value": "• 未认证订阅号不支持部分接口；素材上传需「永久素材」权限。",
+                  "style": "body",
+                  "lines": 2
+                }
+              },
+              {
+                "type": "text",
+                "id": "account_tip_5",
+                "props": {
+                  "value": "• AppSecret 仅在本机以 0600 权限存储，不会上传到任何服务器。",
+                  "style": "body",
+                  "lines": 2
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "container",
+        "id": "page_composer",
+        "props": {
+          "direction": "vertical",
+          "gap": 12
+        },
+        "if": "state.is_composer",
+        "children": [
+          {
+            "type": "container",
+            "id": "composer_toolbar",
+            "props": {
+              "direction": "horizontal",
+              "gap": 12,
+              "align": "center"
+            },
+            "children": [
+              {
+                "type": "form",
+                "id": "theme_form",
+                "props": {
+                  "fields": [
+                    {
+                      "field_id": "theme",
+                      "kind": "picker",
+                      "mode": "menu",
+                      "label": "排版主题",
+                      "options": ["松绿", "素墨"],
+                      "value": "{{state.theme}}"
+                    }
+                  ]
+                },
+                "on": {
+                  "change": "theme_change"
+                }
+              },
+              {
+                "type": "button",
+                "id": "btn_copy_html",
+                "props": {
+                  "label": "复制正文 HTML",
+                  "style": "secondary",
+                  "icon": "square.and.arrow.up"
+                },
+                "on": {
+                  "tap": "copy_html"
+                }
+              },
+              {
+                "type": "button",
+                "id": "btn_save_draft",
+                "props": {
+                  "label": "保存到草稿箱",
+                  "style": "primary",
+                  "disabled": "{{state.account_incomplete}}",
+                  "busy": "{{state.busy}}"
+                },
+                "on": {
+                  "tap": "save_draft"
+                }
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "id": "theme_summary",
+            "props": {
+              "value": "{{state.theme_summary}}",
+              "style": "caption",
+              "color": "text.secondary"
+            }
+          },
+          {
+            "type": "container",
+            "id": "composer_columns",
+            "props": {
+              "direction": "horizontal",
+              "gap": 12
+            },
+            "children": [
+              {
+                "type": "container",
+                "id": "composer_left",
+                "props": {
+                  "direction": "vertical",
+                  "gap": 8
+                },
+                "children": [
+                  {
+                    "type": "text",
+                    "id": "composer_left_title",
+                    "props": {
+                      "value": "Markdown",
+                      "style": "label",
+                      "color": "text.secondary"
+                    }
+                  },
+                  {
+                    "type": "form",
+                    "id": "composer_source_form",
+                    "props": {
+                      "fields": [
+                        {
+                          "field_id": "markdown",
+                          "kind": "textarea",
+                          "label": "正文源码",
+                          "mono": true,
+                          "placeholder": "在此撰写公众号正文（Markdown）",
+                          "value": "{{state.markdown_source}}"
+                        }
+                      ]
+                    },
+                    "on": {
+                      "change": "markdown_change"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "container",
+                "id": "composer_right",
+                "props": {
+                  "direction": "vertical",
+                  "gap": 8
+                },
+                "children": [
+                  {
+                    "type": "text",
+                    "id": "composer_right_title",
+                    "props": {
+                      "value": "微信兼容预览（B1 降级：源码 + 导出 + 系统打开）",
+                      "style": "label",
+                      "color": "text.secondary"
+                    }
+                  },
+                  {
+                    "type": "text",
+                    "id": "composer_preview_source",
+                    "props": {
+                      "value": "{{state.preview_lines}}",
+                      "style": "body",
+                      "lines": 16,
+                      "mono": true
+                    }
+                  },
+                  {
+                    "type": "container",
+                    "id": "composer_preview_actions",
+                    "props": {
+                      "direction": "horizontal",
+                      "gap": 8
+                    },
+                    "children": [
+                      {
+                        "type": "button",
+                        "id": "btn_export_html",
+                        "props": {
+                          "label": "导出 HTML 文件",
+                          "style": "secondary",
+                          "size": "sm",
+                          "icon": "square.and.arrow.down"
+                        },
+                        "on": {
+                          "tap": "export_html"
+                        }
+                      },
+                      {
+                        "type": "button",
+                        "id": "btn_open_html",
+                        "props": {
+                          "label": "用系统打开",
+                          "style": "ghost",
+                          "size": "sm",
+                          "icon": "arrow.up"
+                        },
+                        "on": {
+                          "tap": "open_html"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "container",
+            "id": "composer_meta_card",
+            "props": {
+              "direction": "vertical",
+              "gap": 10,
+              "padding": 14,
+              "card_style": "card"
+            },
+            "children": [
+              {
+                "type": "text",
+                "id": "composer_meta_title",
+                "props": {
+                  "value": "草稿元信息",
+                  "style": "heading"
+                }
+              },
+              {
+                "type": "form",
+                "id": "composer_meta_form",
+                "props": {
+                  "submit_label": "保存到草稿箱",
+                  "fields": [
+                    {
+                      "field_id": "payload_title",
+                      "kind": "field",
+                      "label": "标题",
+                      "required": true,
+                      "value": "{{state.payload_title}}"
+                    },
+                    {
+                      "field_id": "payload_author",
+                      "kind": "field",
+                      "label": "作者",
+                      "value": "{{state.payload_author}}"
+                    },
+                    {
+                      "field_id": "payload_digest",
+                      "kind": "field",
+                      "label": "摘要",
+                      "placeholder": "不填则自动截取正文前 120 字",
+                      "value": "{{state.payload_digest}}"
+                    },
+                    {
+                      "field_id": "cover_media_id",
+                      "kind": "picker",
+                      "mode": "menu",
+                      "label": "封面素材",
+                      "options": ["未选择（必填）"],
+                      "value": "{{state.cover_value}}"
+                    },
+                    {
+                      "field_id": "content_source_url",
+                      "kind": "field",
+                      "label": "原文链接",
+                      "value": "{{state.link_value}}"
+                    },
+                    {
+                      "field_id": "show_cover_pic",
+                      "kind": "toggle",
+                      "label": "显示封面",
+                      "value": "{{state.show_cover_pic}}"
+                    },
+                    {
+                      "field_id": "need_open_comment",
+                      "kind": "toggle",
+                      "label": "开启评论",
+                      "value": "{{state.need_open_comment}}"
+                    },
+                    {
+                      "field_id": "only_fans_can_comment",
+                      "kind": "toggle",
+                      "label": "仅粉丝可评论",
+                      "value": "{{state.only_fans_can_comment}}"
+                    }
+                  ]
+                },
+                "on": {
+                  "change": "meta_change",
+                  "submit": "save_draft"
+                }
+              },
+              {
+                "type": "text",
+                "id": "composer_meta_hint",
+                "props": {
+                  "value": "{{state.meta_hint}}",
+                  "style": "caption",
+                  "color": "warning"
+                },
+                "if": "state.meta_hint_present"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "container",
+        "id": "page_media",
+        "props": {
+          "direction": "vertical",
+          "gap": 12
+        },
+        "if": "state.is_media",
+        "children": [
+          {
+            "type": "container",
+            "id": "media_toolbar",
+            "props": {
+              "direction": "horizontal",
+              "gap": 12,
+              "align": "center"
+            },
+            "children": [
+              {
+                "type": "button",
+                "id": "btn_upload_asset",
+                "props": {
+                  "label": "上传图片到永久素材",
+                  "style": "primary",
+                  "icon": "tray.and.arrow.up",
+                  "disabled": "{{state.upload_blocked}}"
+                },
+                "on": {
+                  "tap": "upload_asset"
+                }
+              },
+              {
+                "type": "text",
+                "id": "media_constraint",
+                "props": {
+                  "value": "支持 JPG / PNG / GIF / BMP / WebP，单张 ≤ 10 MB",
+                  "style": "caption",
+                  "color": "text.secondary"
+                }
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "id": "media_count",
+            "props": {
+              "value": "共 {{state.assets_count}} 个素材",
+              "style": "caption",
+              "color": "text.secondary"
+            }
+          },
+          {
+            "type": "list",
+            "id": "media_list",
+            "props": {
+              "items": "{{state.assets}}",
+              "selection": "none",
+              "lazy": true,
+              "empty_state": "暂无素材。上传后的图片会获得 media_id，可作为草稿封面复用。"
+            },
+            "children": [
+              {
+                "type": "card",
+                "id": "media_row",
+                "props": {
+                  "title": "{{state.item.file_name}}",
+                  "subtitle": "{{state.item.url}}",
+                  "meta": "{{state.item.uploaded_at}}",
+                  "badge": "{{state.item.media_id}}",
+                  "icon": "photo.on.rectangle.angled",
+                  "actions": [
+                    {
+                      "label": "设为封面",
+                      "action": "use_asset_as_cover",
+                      "style": "secondary"
+                    },
+                    {
+                      "label": "复制 media_id",
+                      "action": "copy_asset_media_id",
+                      "style": "ghost"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "container",
+        "id": "page_drafts",
+        "props": {
+          "direction": "vertical",
+          "gap": 12
+        },
+        "if": "state.is_drafts",
+        "children": [
+          {
+            "type": "container",
+            "id": "drafts_toolbar",
+            "props": {
+              "direction": "horizontal",
+              "gap": 12,
+              "align": "center"
+            },
+            "children": [
+              {
+                "type": "button",
+                "id": "btn_refresh_drafts_list",
+                "props": {
+                  "label": "刷新草稿列表",
+                  "style": "secondary",
+                  "icon": "arrow.clockwise",
+                  "disabled": "{{state.drafts_refreshing}}",
+                  "busy": "{{state.drafts_refreshing}}"
+                },
+                "on": {
+                  "tap": "refresh_drafts"
+                }
+              },
+              {
+                "type": "text",
+                "id": "drafts_hint",
+                "props": {
+                  "value": "单次最多返回 20 条；删除操作不可撤销",
+                  "style": "caption",
+                  "color": "text.secondary"
+                }
+              },
+              {
+                "type": "text",
+                "id": "drafts_count",
+                "props": {
+                  "value": "共 {{state.drafts_count}} 条",
+                  "style": "caption",
+                  "color": "text.secondary"
+                }
+              }
+            ]
+          },
+          {
+            "type": "list",
+            "id": "drafts_list",
+            "props": {
+              "items": "{{state.drafts}}",
+              "selection": "single",
+              "lazy": true,
+              "empty_state": "暂无草稿。可在「编辑」页撰写内容并保存到草稿箱。"
+            },
+            "on": {
+              "select": "select_draft"
+            },
+            "children": [
+              {
+                "type": "card",
+                "id": "drafts_row",
+                "props": {
+                  "title": "{{state.item.title}}",
+                  "subtitle": "{{state.item.digest}}",
+                  "meta": "{{state.item.updated_at}}",
+                  "badge": "{{state.item.media_id}}",
+                  "icon": "doc.fill",
+                  "actions": [
+                    {
+                      "label": "设为发布目标",
+                      "action": "use_draft_as_target",
+                      "style": "secondary"
+                    },
+                    {
+                      "label": "删除",
+                      "action": "delete_draft",
+                      "style": "danger"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "container",
+        "id": "page_publish",
+        "props": {
+          "direction": "vertical",
+          "gap": 12
+        },
+        "if": "state.is_publish",
+        "children": [
+          {
+            "type": "container",
+            "id": "publish_permission_card",
+            "props": {
+              "direction": "vertical",
+              "gap": 10,
+              "padding": 14,
+              "card_style": "card"
+            },
+            "children": [
+              {
+                "type": "text",
+                "id": "publish_permission_title",
+                "props": {
+                  "value": "发布权限",
+                  "style": "heading"
+                }
+              },
+              {
+                "type": "container",
+                "id": "publish_permission_states",
+                "props": {
+                  "direction": "horizontal",
+                  "gap": 10,
+                  "align": "center"
+                },
+                "children": [
+                  {
+                    "type": "icon",
+                    "id": "publish_icon_unknown",
+                    "props": {
+                      "name": "questionmark.circle",
+                      "size": "md"
+                    },
+                    "if": "state.publish_unknown"
+                  },
+                  {
+                    "type": "icon",
+                    "id": "publish_icon_granted",
+                    "props": {
+                      "name": "checkmark.circle.fill",
+                      "size": "md"
+                    },
+                    "if": "state.publish_granted"
+                  },
+                  {
+                    "type": "icon",
+                    "id": "publish_icon_denied",
+                    "props": {
+                      "name": "xmark.circle.fill",
+                      "size": "md"
+                    },
+                    "if": "state.publish_denied"
+                  },
+                  {
+                    "type": "text",
+                    "id": "publish_state_unknown",
+                    "props": {
+                      "value": "尚未探测",
+                      "style": "body",
+                      "color": "text.secondary"
+                    },
+                    "if": "state.publish_unknown"
+                  },
+                  {
+                    "type": "text",
+                    "id": "publish_state_granted",
+                    "props": {
+                      "value": "可用（freepublish）",
+                      "style": "body",
+                      "color": "success"
+                    },
+                    "if": "state.publish_granted"
+                  },
+                  {
+                    "type": "text",
+                    "id": "publish_state_denied",
+                    "props": {
+                      "value": "不可用",
+                      "style": "body",
+                      "color": "warning"
+                    },
+                    "if": "state.publish_denied"
+                  },
+                  {
+                    "type": "progress",
+                    "id": "publish_probing_spinner",
+                    "props": {
+                      "style": "spinner",
+                      "label": "正在探测…"
+                    },
+                    "if": "state.publish_probing"
+                  },
+                  {
+                    "type": "button",
+                    "id": "btn_reprobe_permission",
+                    "props": {
+                      "label": "重新探测",
+                      "style": "secondary",
+                      "size": "sm",
+                      "disabled": "{{state.publish_probing}}"
+                    },
+                    "on": {
+                      "tap": "refresh_publish_permission"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "id": "publish_permission_reason",
+                "props": {
+                  "value": "{{state.publish_reason}}",
+                  "style": "body",
+                  "lines": 6,
+                  "color": "text.secondary"
+                },
+                "if": "state.publish_reason_present"
+              }
+            ]
+          },
+          {
+            "type": "container",
+            "id": "publish_submit_card",
+            "props": {
+              "direction": "vertical",
+              "gap": 10,
+              "padding": 14,
+              "card_style": "card"
+            },
+            "if": "state.publish_granted",
+            "children": [
+              {
+                "type": "text",
+                "id": "publish_submit_title",
+                "props": {
+                  "value": "提交发布",
+                  "style": "heading"
+                }
+              },
+              {
+                "type": "form",
+                "id": "publish_form",
+                "props": {
+                  "fields": [
+                    {
+                      "field_id": "publish_target",
+                      "kind": "picker",
+                      "mode": "menu",
+                      "label": "目标草稿",
+                      "options": ["未选择"],
+                      "value": "{{state.publish_target}}"
+                    },
+                    {
+                      "field_id": "publish_id",
+                      "kind": "field",
+                      "label": "publish_id",
+                      "placeholder": "发布成功后回填，用于查询状态",
+                      "value": "{{state.publish_id}}"
+                    }
+                  ]
+                },
+                "on": {
+                  "change": "publish_form_change",
+                  "submit": "query_publish_status"
+                }
+              },
+              {
+                "type": "container",
+                "id": "publish_actions",
+                "props": {
+                  "direction": "horizontal",
+                  "gap": 10
+                },
+                "children": [
+                  {
+                    "type": "button",
+                    "id": "btn_refresh_draft_options",
+                    "props": {
+                      "label": "刷新列表",
+                      "style": "ghost",
+                      "icon": "arrow.clockwise"
+                    },
+                    "on": {
+                      "tap": "refresh_drafts"
+                    }
+                  },
+                  {
+                    "type": "button",
+                    "id": "btn_submit_publish",
+                    "props": {
+                      "label": "提交发布",
+                      "style": "primary",
+                      "busy": "{{state.publish_busy}}"
+                    },
+                    "on": {
+                      "tap": "submit_publish"
+                    }
+                  },
+                  {
+                    "type": "button",
+                    "id": "btn_query_publish",
+                    "props": {
+                      "label": "查询发布状态",
+                      "style": "secondary"
+                    },
+                    "on": {
+                      "tap": "query_publish_status"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "id": "publish_status",
+                "props": {
+                  "value": "发布状态：{{state.publish_status}}",
+                  "style": "body"
+                },
+                "if": "state.publish_status_present"
+              },
+              {
+                "type": "button",
+                "id": "btn_copy_publish_status",
+                "props": {
+                  "label": "复制发布状态",
+                  "style": "ghost",
+                  "size": "sm",
+                  "icon": "square.and.arrow.up"
+                },
+                "if": "state.publish_status_present",
+                "on": {
+                  "tap": "copy_publish_status"
+                }
+              }
+            ]
+          },
+          {
+            "type": "container",
+            "id": "publish_explain_card",
+            "props": {
+              "direction": "vertical",
+              "gap": 6,
+              "padding": 14,
+              "card_style": "card"
+            },
+            "children": [
+              {
+                "type": "text",
+                "id": "publish_explain_title",
+                "props": {
+                  "value": "发布说明",
+                  "style": "heading"
+                }
+              },
+              {
+                "type": "text",
+                "id": "publish_note_1",
+                "props": {
+                  "value": "• 发布接口为 freepublish/submit，需在公众平台开通「发布能力」权限包。",
+                  "style": "body",
+                  "lines": 2
+                }
+              },
+              {
+                "type": "text",
+                "id": "publish_note_2",
+                "props": {
+                  "value": "• 提交后进入平台审核队列，可用 publish_id 轮询发布状态。",
+                  "style": "body",
+                  "lines": 2
+                }
+              },
+              {
+                "type": "text",
+                "id": "publish_note_3",
+                "props": {
+                  "value": "• 未取得权限时仅可保存 / 管理草稿箱，发布入口不显示。",
+                  "style": "body",
+                  "lines": 2
+                }
+              },
+              {
+                "type": "text",
+                "id": "publish_note_4",
+                "props": {
+                  "value": "• 每日发布次数受平台配额限制，超出会返回 45009。",
+                  "style": "body",
+                  "lines": 2
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "overlay",
+        "id": "banner_upload_blocked",
+        "props": {
+          "kind": "banner",
+          "visible": "{{state.upload_blocked}}",
+          "text": "永久素材上传需要底座开放「写类网络」高危能力（G4），当前仅支持素材展示与复制；上传能力获批后此处自动隐藏。",
+          "level": "warning"
+        }
+      },
+      {
+        "type": "overlay",
+        "id": "toast_copy_done",
+        "props": {
+          "kind": "toast",
+          "visible": "{{state.toast_visible}}",
+          "text": "{{state.toast_text}}",
+          "duration_ms": 1600
+        }
+      },
+      {
+        "type": "overlay",
+        "id": "dialog_confirm_delete",
+        "props": {
+          "kind": "dialog",
+          "visible": "{{state.confirm_delete}}",
+          "title": "删除草稿",
+          "message": "确认删除草稿《{{state.delete_target_title}}》？删除操作不可撤销。",
+          "confirm_label": "删除",
+          "cancel_label": "取消",
+          "danger": true
+        },
+        "on": {
+          "confirm": "confirm_delete_draft",
+          "cancel": "cancel_delete_draft"
+        }
+      }
+    ]
+  }
+}
