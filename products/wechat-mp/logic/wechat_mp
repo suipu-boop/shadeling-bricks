@@ -1,0 +1,1848 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""微信公众号（wechat-mp）· 逻辑进程（brick-app/v2 声明式）。
+
+职责
+----
+1. 充当包内 ``ui/main.json``（shadeling-ui/1）的唯一数据面：维护 53 个 state 键
+   与 26 个事件，节点树 / 条件 / 列表模板全部由 UI 文档声明，本进程只填数据。
+2. 移植 v1 Swift 侧的业务语义：Markdown→微信内联样式 HTML（MarkdownRenderer +
+   Themes.swift 的 pine/plainInk 两主题）、凭据私有目录 0600 存储（CredentialStore）、
+   access_token 串行缓存与 40001/42001 失效重取（TokenManager）、素材 / 草稿 /
+   发布三类接口契约（MediaService / DraftService / PublishService）与微信错误码映射。
+3. 受控网络写（契约 §5.3.8 + 审 2026-10-09 评审记录五约束）：**唯一**出口是本进程
+   通过 ``agent.web.write`` 能力发起请求，host 白名单 ``api.weixin.qq.com``、显式
+   method + body、multipart ≤ 10MB、凭据只落私有目录 0600、高危动作标红 + 二次确认 +
+   审计行。能力未授予时**显式降级**（横幅 / 提示 / 状态位），不静默失败、不假装成功。
+
+权限与降级口径
+--------------
+- ``agent.web.write``（G4，high）未授予 → ``state.upload_blocked = True``（素材页横幅），
+  测试连接 / 草稿增删刷新 / 发布探测提交查询一律给出明确文案并保持 unknown 态。
+  该能力一旦授予，无需改包、无需改代码即可工作（本文件的完整链路已经实现）。
+- ``ui.clipboard.write`` / ``fs.pick`` 已声明；逻辑进程可直读 fs.pick 回执路径（T1 结论）。
+
+环境
+----
+- ``SHADELING_BRICK_SDK_DIR``：brick_sdk.py 所在目录（缺失时按仓库相对位置兜底）。
+- ``initialize`` 注入的 ``private_dir``：凭据 / 令牌 / 导出物的落盘根（缺失时用旧版
+  目录 ``~/Library/Application Support/com.shadeling.brick.wechat-mp`` 只读接管）。
+"""
+
+from __future__ import annotations
+
+import copy
+import hashlib
+import html
+import json
+import os
+import re
+import sys
+import time
+import uuid
+from datetime import datetime
+
+APP_NAME = "wechat-mp"
+HOST_WHITELIST = "api.weixin.qq.com"
+MULTIPART_LIMIT_BYTES = 10 * 1024 * 1024
+LEGACY_DIR = os.path.expanduser("~/Library/Application Support/com.shadeling.brick.wechat-mp")
+
+
+# ---------------------------------------------------------------------------
+# SDK 定位
+# ---------------------------------------------------------------------------
+
+def _locate_sdk_dir():
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = []
+    env = os.environ.get("SHADELING_BRICK_SDK_DIR")
+    if env:
+        candidates.append(env)
+    up = here
+    for _ in range(6):
+        up = os.path.dirname(up)
+        candidates.append(os.path.join(up, "Shadeling", "sdk", "python"))
+        candidates.append(os.path.join(up, "sdk", "python"))
+    candidates.append(os.path.expanduser("~/Dev/Shadeling/sdk/python"))
+    for cand in candidates:
+        if cand and os.path.isfile(os.path.join(cand, "brick_sdk.py")):
+            return cand
+    return None
+
+
+_SDK_DIR = _locate_sdk_dir()
+if _SDK_DIR is None:
+    sys.stderr.write("[wechat-mp] 未找到 brick_sdk.py：请设置 SHADELING_BRICK_SDK_DIR\n")
+    raise SystemExit(1)
+if _SDK_DIR not in sys.path:
+    sys.path.insert(0, _SDK_DIR)
+
+import brick_sdk  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# 包内 UI 文档（唯一结构真相）
+# ---------------------------------------------------------------------------
+
+PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+UI_ENTRY = os.path.join(PACKAGE_ROOT, "ui", "main.json")
+UI_LOAD_NOTE = ""
+UI_DOC = None
+UI_BASE = None
+
+
+def _load_ui():
+    """载入包内 ui/main.json；失败返回 (None, None) 并记录原因（由 fallback 兜底）。"""
+    global UI_LOAD_NOTE
+    if not os.path.isfile(UI_ENTRY):
+        UI_LOAD_NOTE = "包内缺少 ui/main.json"
+        return None, None
+    try:
+        with open(UI_ENTRY, "r", encoding="utf-8") as handle:
+            doc = json.load(handle)
+    except (OSError, ValueError) as exc:
+        UI_LOAD_NOTE = "ui/main.json 载入失败：%s" % exc
+        return None, None
+    if doc.get("schema") != "shadeling-ui/1":
+        UI_LOAD_NOTE = "ui/main.json schema 非 shadeling-ui/1"
+        return None, None
+    root = doc.get("root")
+    if not isinstance(root, dict) or root.get("id") != "root":
+        UI_LOAD_NOTE = "ui/main.json 缺少合法 root"
+        return None, None
+    return doc, root
+
+
+UI_DOC, UI_BASE = _load_ui()
+
+STATE_SNAPSHOT = dict((UI_DOC or {}).get("state_snapshot") or {})
+if not STATE_SNAPSHOT:  # 兜底：文档不可用时仍保证下述键存在（显式告警，不静默）
+    STATE_SNAPSHOT = {
+        "page": "账号", "page_label": "账号", "is_account": True, "is_composer": False,
+        "is_media": False, "is_drafts": False, "is_publish": False, "busy": False,
+        "notice_text": "就绪", "notice_is_error": False, "toast_visible": False,
+        "toast_text": "已复制", "account_complete": False, "account_incomplete": True,
+        "account_testing": False, "app_id": "", "secret": "", "store_path": "",
+        "account_report_present": False, "account_report": "", "theme": "松绿",
+        "theme_summary": "", "markdown_source": "", "preview_lines": "",
+        "meta_hint_present": False, "meta_hint": "", "payload_title": "",
+        "payload_author": "", "payload_digest": "", "cover_value": "未选择（必填）",
+        "link_value": "", "show_cover_pic": True, "need_open_comment": False,
+        "only_fans_can_comment": False, "assets_count": 0, "assets": [],
+        "upload_blocked": True, "drafts_count": 0, "drafts": [],
+        "drafts_refreshing": False, "confirm_delete": False,
+        "delete_target_title": "", "publish_unknown": True, "publish_probing": False,
+        "publish_granted": False, "publish_denied": False,
+        "publish_reason_present": False, "publish_reason": "", "publish_target": "未选择",
+        "publish_id": "", "publish_status_present": False, "publish_status": "",
+        "publish_busy": False,
+    }
+
+PAGE_KEYS = {
+    "账号": "is_account",
+    "编辑": "is_composer",
+    "素材": "is_media",
+    "草稿": "is_drafts",
+    "发布": "is_publish",
+}
+PAGE_ORDER = list(PAGE_KEYS.keys())
+
+# 交互态字段：宿主 ui_state / payload 里可能出现，统一并入 state
+FORM_FIELD_KEYS = (
+    "page", "theme", "app_id", "app_secret", "secret", "markdown",
+    "payload_title", "payload_author", "payload_digest", "cover_media_id",
+    "content_source_url", "show_cover_pic", "need_open_comment",
+    "only_fans_can_comment", "publish_target", "publish_id",
+)
+FIELD_TO_STATE = {"app_secret": "secret", "markdown": "markdown_source"}
+
+
+# ---------------------------------------------------------------------------
+# 排版主题（对齐 source/Sources/WeChatMP/Markdown/Themes.swift pine / plainInk）
+# ---------------------------------------------------------------------------
+
+THEMES = {
+    "松绿": {
+        "id": "pine",
+        "name": "松绿",
+        "summary": "绿色强调，标题带竖线，适合资讯 / 技术分享",
+        "font_family": "-apple-system,BlinkMacSystemFont,'Helvetica Neue','PingFang SC','Microsoft YaHei',sans-serif",
+        "font_size": 16,
+        "line_height": 1.8,
+        "paragraph_spacing": 18,
+        "text": "#2b2b2b",
+        "secondary": "#5a5a5a",
+        "accent": "#0f7b6c",
+        "divider": "#e6e6e6",
+        "quote_bg": "#f4f8f7",
+        "code_bg": "#f5f6f7",
+        "heading": "bar",
+    },
+    "素墨": {
+        "id": "plain-ink",
+        "name": "素墨",
+        "summary": "黑白极简，标题下划线，适合长文 / 观点表达",
+        "font_family": "-apple-system,BlinkMacSystemFont,'Helvetica Neue','PingFang SC','Microsoft YaHei',sans-serif",
+        "font_size": 16,
+        "line_height": 1.9,
+        "paragraph_spacing": 20,
+        "text": "#1f1f1f",
+        "secondary": "#666666",
+        "accent": "#1f1f1f",
+        "divider": "#e0e0e0",
+        "quote_bg": "#fafafa",
+        "code_bg": "#f4f4f4",
+        "heading": "underline",
+    },
+}
+DEFAULT_THEME = "松绿"
+
+
+def theme_of(name):
+    return THEMES.get(name) or THEMES[DEFAULT_THEME]
+
+
+def _style_body(t):
+    return ("font-family:%s;font-size:%dpx;line-height:%s;color:%s;letter-spacing:0.5px;"
+            % (t["font_family"], t["font_size"], t["line_height"], t["text"]))
+
+
+def _style_paragraph(t):
+    return ("margin:0 0 %dpx;font-size:%dpx;line-height:%s;color:%s;"
+            % (t["paragraph_spacing"], t["font_size"], t["line_height"], t["text"]))
+
+
+def _style_quote(t):
+    return ("margin:0 0 %dpx;padding:12px 16px;border-left:3px solid %s;background:%s;"
+            "color:%s;font-size:%dpx;line-height:%s;"
+            % (t["paragraph_spacing"], t["accent"], t["quote_bg"], t["secondary"],
+               t["font_size"] - 1, t["line_height"]))
+
+
+def _style_code_block(t):
+    return ("margin:0 0 %dpx;padding:14px 16px;background:%s;border-radius:6px;"
+            "font-family:Menlo,Consolas,monospace;font-size:%dpx;line-height:1.6;color:%s;"
+            "white-space:pre-wrap;word-break:break-word;"
+            % (t["paragraph_spacing"], t["code_bg"], t["font_size"] - 2, t["text"]))
+
+
+def _style_inline_code(t):
+    return ("padding:1px 5px;background:%s;border-radius:3px;"
+            "font-family:Menlo,Consolas,monospace;font-size:%dpx;color:%s;"
+            % (t["code_bg"], t["font_size"] - 2, t["accent"]))
+
+
+def _style_link(t):
+    return "color:%s;text-decoration:none;border-bottom:1px solid %s;" % (t["accent"], t["accent"])
+
+
+def _style_image():
+    return "max-width:100%;height:auto;border-radius:4px;display:block;margin:0 auto;"
+
+
+def _style_divider(t):
+    return "border:none;border-top:1px solid %s;margin:24px 0;" % t["divider"]
+
+
+def _style_list_item(t):
+    return ("margin:0 0 6px;font-size:%dpx;line-height:%s;color:%s;"
+            % (t["font_size"], t["line_height"], t["text"]))
+
+
+def _style_list_container(t):
+    return "margin:0 0 %dpx;padding-left:22px;" % t["paragraph_spacing"]
+
+
+def _style_heading(t, level):
+    level = max(1, min(6, int(level)))
+    size = t["font_size"] + max(0, (7 - level) * 2)
+    base = ("margin:28px 0 16px;font-size:%dpx;font-weight:700;line-height:1.4;color:%s;"
+            % (size, t["text"]))
+    if t["heading"] == "bar":
+        return base + "padding-left:12px;border-left:4px solid %s;" % t["accent"]
+    if t["heading"] == "underline":
+        return base + "padding-bottom:8px;border-bottom:1px solid %s;" % t["divider"]
+    return base
+
+
+# --- 行内语法 ---------------------------------------------------------------
+
+_RE_IMG = re.compile(r"!\[([^\]]*)\]\(([^)\s]+)\)")
+_RE_LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+_RE_BOLD = re.compile(r"\*\*([^*]+)\*\*")
+_RE_STRIKE = re.compile(r"~~([^~]+)~~")
+_RE_CODE = re.compile(r"`([^`]+)`")
+_RE_ITALIC = re.compile(r"(?<!\*)\*([^*\n]+)\*(?!\*)")
+
+
+def _inline(text, t):
+    """行内语法 → 内联样式标签（微信编辑器剥离 class，样式必须内联）。"""
+    out = html.escape(text.strip())
+    out = _RE_CODE.sub(lambda m: '<code style="%s">%s</code>' % (_style_inline_code(t), m.group(1)), out)
+    out = _RE_IMG.sub(lambda m: '<img src="%s" alt="%s" style="%s"/>'
+                      % (m.group(2), m.group(1), _style_image()), out)
+    out = _RE_LINK.sub(lambda m: '<a href="%s" style="%s">%s</a>'
+                       % (m.group(2), _style_link(t), m.group(1)), out)
+    out = _RE_BOLD.sub(lambda m: "<strong>%s</strong>" % m.group(1), out)
+    out = _RE_STRIKE.sub(lambda m: "<del>%s</del>" % m.group(1), out)
+    out = _RE_ITALIC.sub(lambda m: "<em>%s</em>" % m.group(1), out)
+    return out
+
+
+def render_markdown(markdown, theme_name):
+    """Markdown → 微信兼容 HTML（块级 + 行内全内联样式；空输入返回空串）。"""
+    t = theme_of(theme_name)
+    src = (markdown or "").replace("\r\n", "\n").replace("\r", "\n")
+    if not src.strip():
+        return ""
+    lines = src.split("\n")
+    blocks = []
+    i = 0
+    total = len(lines)
+    while i < total:
+        line = lines[i]
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            i += 1
+            buf = []
+            while i < total and not lines[i].strip().startswith("```"):
+                buf.append(lines[i])
+                i += 1
+            i += 1  # 吞掉收尾围栏（缺失时也前进一行，避免死循环）
+            body = html.escape("\n".join(buf))
+            blocks.append('<pre style="%s"><code>%s</code></pre>' % (_style_code_block(t), body))
+            continue
+        if not stripped:
+            i += 1
+            continue
+        if re.match(r"^(---+|\*\*\*+|___+)$", stripped):
+            blocks.append('<hr style="%s"/>' % _style_divider(t))
+            i += 1
+            continue
+        m = re.match(r"^(#{1,6})\s+(.*)$", stripped)
+        if m:
+            level = len(m.group(1))
+            blocks.append('<h%d style="%s">%s</h%d>'
+                          % (level, _style_heading(t, level), _inline(m.group(2), t), level))
+            i += 1
+            continue
+        if stripped.startswith(">"):
+            buf = []
+            while i < total and lines[i].strip().startswith(">"):
+                buf.append(lines[i].strip()[1:].strip())
+                i += 1
+            blocks.append('<blockquote style="%s"><p style="%s">%s</p></blockquote>'
+                          % (_style_quote(t), _style_paragraph(t), _inline(" ".join(buf), t)))
+            continue
+        m = re.match(r"^[-*+]\s+(.*)$", stripped)
+        if m:
+            items = []
+            while i < total:
+                mm = re.match(r"^[-*+]\s+(.*)$", lines[i].strip())
+                if not mm:
+                    break
+                items.append('<li style="%s">%s</li>' % (_style_list_item(t), _inline(mm.group(1), t)))
+                i += 1
+            blocks.append('<ul style="%s">%s</ul>' % (_style_list_container(t), "".join(items)))
+            continue
+        m = re.match(r"^\d+[.)]\s+(.*)$", stripped)
+        if m:
+            items = []
+            while i < total:
+                mm = re.match(r"^\d+[.)]\s+(.*)$", lines[i].strip())
+                if not mm:
+                    break
+                items.append('<li style="%s">%s</li>' % (_style_list_item(t), _inline(mm.group(1), t)))
+                i += 1
+            blocks.append('<ol style="%s">%s</ol>' % (_style_list_container(t), "".join(items)))
+            continue
+        buf = [stripped]
+        i += 1
+        while i < total:
+            nxt = lines[i].strip()
+            if not nxt or re.match(r"^(#{1,6}\s|[-*+]\s|\d+[.)]\s|>|```|---+$|\*\*\*+$)", nxt):
+                break
+            buf.append(nxt)
+            i += 1
+        blocks.append('<p style="%s">%s</p>' % (_style_paragraph(t), _inline(" ".join(buf), t)))
+    body = "\n".join(blocks)
+    return '<section style="%s">\n%s\n</section>' % (_style_body(t), body)
+
+
+# ---------------------------------------------------------------------------
+# 微信错误码（对齐 v1 WeChatError.swift 映射）
+# ---------------------------------------------------------------------------
+
+WECHAT_ERRORS = {
+    -1: "系统繁忙，请稍后重试",
+    40001: "access_token 无效（已自动刷新重试一次）",
+    40013: "AppID 无效",
+    40014: "access_token 不合法",
+    40164: "调用方 IP 不在白名单（请把本机出口 IP 加入公众平台 IP 白名单）",
+    42001: "access_token 已过期（已自动刷新重试一次）",
+    45009: "接口日调用配额已用尽",
+    48001: "api 功能未授权（该接口权限包未开通）",
+    53002: "素材类型不合法",
+    53500: "素材不存在",
+}
+TOKEN_INVALID_CODES = (40001, 40014, 42001)
+NO_PERMISSION_CODES = (48001,)
+
+
+def wechat_error_text(errcode, errmsg=""):
+    base = WECHAT_ERRORS.get(int(errcode)) if errcode is not None else None
+    if base:
+        return "%s（errcode=%s）" % (base, errcode)
+    if errmsg:
+        return "%s（errcode=%s）" % (errmsg, errcode)
+    return "微信接口返回异常（errcode=%s）" % errcode
+
+
+# ---------------------------------------------------------------------------
+# 存储：私有目录 0600（凭据 / 令牌 / 导出物）
+# ---------------------------------------------------------------------------
+
+def _ensure_dir(path, mode=0o700):
+    if not os.path.isdir(path):
+        os.makedirs(path, mode=mode, exist_ok=True)
+    return path
+
+
+def _write_private(path, text):
+    """原子写 + 0600（凭据只落私有目录，不写全局可读位置）。"""
+    _ensure_dir(os.path.dirname(path))
+    tmp = "%s.tmp-%s" % (path, uuid.uuid4().hex[:8])
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+    finally:
+        os.replace(tmp, path)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return path
+
+
+def _read_json(path):
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return None
+
+
+class Store:
+    """凭据 / 令牌 / 导出物存储：private_dir 优先，旧版全局目录只读接管。"""
+
+    def __init__(self, private_dir=None):
+        self.private_dir = private_dir or LEGACY_DIR
+        self.legacy_dir = LEGACY_DIR
+        self.adopted_from_legacy = False
+
+    @property
+    def account_path(self):
+        return os.path.join(self.private_dir, "account.json")
+
+    @property
+    def token_path(self):
+        return os.path.join(self.private_dir, "token.json")
+
+    @property
+    def export_dir(self):
+        return os.path.join(self.private_dir, "exports")
+
+    def load_account(self):
+        data = _read_json(self.account_path)
+        if data:
+            return {"app_id": str(data.get("app_id") or ""), "secret": str(data.get("secret") or "")}
+        legacy = _read_json(os.path.join(self.legacy_dir, "account.json"))
+        if legacy:
+            self.adopted_from_legacy = True
+            return {"app_id": str(legacy.get("app_id") or ""), "secret": str(legacy.get("secret") or "")}
+        return {"app_id": "", "secret": ""}
+
+    def save_account(self, app_id, secret):
+        _write_private(self.account_path,
+                       json.dumps({"app_id": app_id, "secret": secret,
+                                   "saved_at": _now_text()}, ensure_ascii=False, indent=2))
+        return self.account_path
+
+    def load_token(self):
+        data = _read_json(self.token_path) or {}
+        return data if isinstance(data, dict) else {}
+
+    def save_token(self, token, expires_at, app_id):
+        _write_private(self.token_path, json.dumps(
+            {"access_token": token, "expires_at": expires_at, "app_id": app_id,
+             "saved_at": _now_text()}, ensure_ascii=False, indent=2))
+
+
+def _now_text():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+# ---------------------------------------------------------------------------
+# 传输层：受控网络写（唯一出口）+ 能力未就绪显式降级
+# ---------------------------------------------------------------------------
+
+class TransportError(Exception):
+    def __init__(self, kind, message, code=None):
+        super().__init__(message)
+        self.kind = kind          # unavailable / protocol / transport / wechat
+        self.message = message
+        self.code = code
+
+
+def _log(text):
+    """普通日志（本地操作；不含凭据取值）。"""
+    try:
+        APP.log("info", text)
+    except Exception:
+        sys.stderr.write("%s\n" % text)
+
+
+def _audit(text):
+    """审计行：仅用于**出网调用**留痕（host / method / path / 响应码）。
+
+    契约 §5.3.8 与受控网络写评审：每次 `agent.web.write` 出网必须留痕，
+    且审计只记键名与字节数、不出现凭据取值；本地文件操作走 `_log` 不入审计。
+    stderr 直通，不混入 stdout。
+    """
+    try:
+        APP.log("info", "[audit] %s" % text)
+    except Exception:
+        sys.stderr.write("[audit] %s\n" % text)
+
+
+class BaseTransport:
+    available = False
+
+    def request(self, req, on_done):  # pragma: no cover - 抽象
+        raise NotImplementedError
+
+
+class CapabilityTransport(BaseTransport):
+    """经 host 能力 ``agent.web.write`` 发起请求（逻辑进程不直连网络）。"""
+
+    CAPABILITY = "agent.web.write"
+
+    def __init__(self):
+        self.jobs = {}
+
+    @property
+    def available(self):
+        return self.CAPABILITY in (getattr(APP, "granted_permissions", None) or [])
+
+    def why_unavailable(self):
+        return ("写类网络能力 %s（G4，高危）未授予：测试连接 / 素材上传 / 草稿增删刷新 / "
+                "发布探测与提交 暂不可用；该能力获批后无需改包即可恢复。" % self.CAPABILITY)
+
+    def request(self, req, on_done):
+        """on_done(res, err)：与 WeChatClient 的回调口径一致（res=None 表示失败）。"""
+        if not self.available:
+            on_done(None, TransportError("unavailable", self.why_unavailable(), code=4309))
+            return
+        if req["host"] != HOST_WHITELIST:
+            on_done(None, TransportError("protocol", "目标主机不在白名单：%s" % req["host"]))
+            return
+        audit = "%s %s%s body=%s" % (req["method"], req["host"], req["path"],
+                                     "json" if req.get("body") is not None else "none")
+        if req.get("multipart"):
+            size = int(req["multipart"].get("size") or 0)
+            if size > MULTIPART_LIMIT_BYTES:
+                on_done(None, TransportError("protocol", "multipart 超过 10MB 上限：%d 字节" % size))
+                return
+            audit += " multipart=%s(%d 字节)" % (req["multipart"].get("name"), size)
+        _audit(audit)
+        payload = {
+            "host": req["host"],
+            "method": req["method"],
+            "path": req["path"],
+            "query": req.get("query") or {},
+            "headers": req.get("headers") or {"Content-Type": "application/json"},
+            "timeout_s": int(req.get("timeout_s") or 30),
+        }
+        if req.get("body") is not None:
+            payload["body"] = req["body"]
+        if req.get("multipart"):
+            payload["multipart"] = req["multipart"]
+        call_id = APP.call_capability(self.CAPABILITY, payload)
+        if call_id:
+            self.jobs[call_id] = on_done
+        else:
+            on_done(None, TransportError("transport", "能力调用未返回 call_id"))
+
+    def resolve(self, call_id, result, error):
+        cb = self.jobs.pop(call_id, None)
+        if cb is None:
+            return False
+        if error:
+            cb(None, TransportError("transport", str(error.get("message") or error),
+                                    code=error.get("code")))
+            return True
+        cb(_normalize_result(result), None)
+        return True
+
+
+def _normalize_result(result):
+    """能力应答归一：{status, json} / 原始 body 两种形态都接受。"""
+    if not isinstance(result, dict):
+        return {"status": 0, "json": None, "text": str(result or "")}
+    status = result.get("status") if result.get("status") is not None else result.get("status_code")
+    body = result.get("json")
+    if body is None and result.get("body") is not None:
+        raw = result.get("body")
+        if isinstance(raw, dict):
+            body = raw
+        else:
+            try:
+                body = json.loads(raw)
+            except (TypeError, ValueError):
+                body = None
+    if isinstance(result.get("errcode"), int):
+        body = result
+    return {"status": int(status or 0), "json": body,
+            "text": result.get("text") or result.get("body_text") or ""}
+
+
+def _wechat_result_error(payload):
+    """把微信应答转成 TransportError（errcode != 0）；成功返回 None。"""
+    if not isinstance(payload, dict):
+        return TransportError("protocol", "应答不是合法 JSON")
+    code = payload.get("errcode")
+    if code in (0, None):
+        return None
+    return TransportError("wechat", wechat_error_text(code, payload.get("errmsg") or ""), code=int(code))
+
+
+# ---------------------------------------------------------------------------
+# 微信接口客户端（素材 / 草稿 / 发布 / token）
+# ---------------------------------------------------------------------------
+
+PATHS = {
+    "token": "/cgi-bin/token",
+    "material_add": "/cgi-bin/material/add_material",
+    "draft_add": "/cgi-bin/draft/add",
+    "draft_batchget": "/cgi-bin/draft/batchget",
+    "draft_delete": "/cgi-bin/draft/delete",
+    "publish_batchget": "/cgi-bin/freepublish/batchget",
+    "publish_submit": "/cgi-bin/freepublish/submit",
+    "publish_get": "/cgi-bin/freepublish/get",
+    "material_count": "/cgi-bin/material/get_materialcount",
+}
+
+
+class WeChatClient:
+    """微信接口调用（token 串行缓存 + 失效重取 + 错误码中文映射）。同步语义由回调表达。"""
+
+    def __init__(self, transport, store, credentials=None):
+        self.transport = transport
+        self.store = store
+        self.credentials = credentials or {}
+        self.token = ""
+        self.token_expires_at = 0.0
+        cached = store.load_token()
+        if cached.get("access_token") and float(cached.get("expires_at") or 0) > time.time():
+            self.token = str(cached["access_token"])
+            self.token_expires_at = float(cached["expires_at"])
+
+    # -- token -------------------------------------------------------------
+
+    def token_valid(self):
+        return bool(self.token) and self.token_expires_at > time.time() + 30
+
+    def ensure_token(self, on_done):
+        if self.token_valid():
+            on_done(None)
+            return
+
+        def after(res, err):
+            if err:
+                on_done(err)
+                return
+            if not res:
+                on_done(TransportError("protocol", "token 接口返回空应答"))
+                return
+            payload = res.get("json") or {}
+            err2 = _wechat_result_error(payload)
+            if err2:
+                on_done(err2)
+                return
+            self.token = str(payload.get("access_token") or "")
+            expires_in = int(payload.get("expires_in") or 7200)
+            self.token_expires_at = time.time() + expires_in
+            self.store.save_token(self.token, self.token_expires_at, self.credentials.get("app_id") or "")
+            on_done(None)
+
+        self._request({
+            "host": HOST_WHITELIST,
+            "method": "GET",
+            "path": PATHS["token"],
+            "query": {"grant_type": "client_credential",
+                      "appid": self.credentials.get("app_id") or "",
+                      "secret": self.credentials.get("secret") or ""},
+            "timeout_s": 20,
+        }, after)
+
+    def _request(self, req, on_done):
+        """统一出网入口：**调用即留痕**（host / method / path），回执补响应码。
+
+        审计只记键名与字节数（不记 query / body 取值，凭据不入日志，评审 §4）。
+        """
+        form = "none"
+        if req.get("multipart"):
+            form = "multipart(%d 字节)" % int((req.get("multipart") or {}).get("size") or 0)
+        elif req.get("body") is not None:
+            form = "json"
+        _audit("host=%s method=%s path=%s body=%s" % (req["host"], req["method"],
+                                                      req["path"], form))
+
+        def after(res=None, err=None):
+            if err is not None:
+                _audit("host=%s path=%s ← ok=false code=%s" % (req["host"], req["path"],
+                                                               getattr(err, "code", None)))
+            else:
+                _audit("host=%s path=%s ← ok=true status=%s" % (req["host"], req["path"],
+                                                                (res or {}).get("status")))
+            on_done(res, err)
+
+        self.transport.request(req, after)
+
+    def expire_token(self):
+        self.token = ""
+        self.token_expires_at = 0.0
+
+    # -- 通用请求 -----------------------------------------------------------
+
+    def call(self, path, body=None, query=None, multipart=None, need_token=True, on_done=None):
+        def make_after(allow_retry):
+            """构造响应处理器；重试路径传 allow_retry=False，避免失效重试再触发重试。"""
+            def after(res, err2):
+                if err2:
+                    on_done(None, err2)
+                    return
+                payload = res.get("json")
+                err3 = _wechat_result_error(payload)
+                if err3 and err3.code in TOKEN_INVALID_CODES and need_token and allow_retry:
+                    # 40001 / 40014 / 42001：失效重取一次，重试仍走同一响应处理器（含错误码判定）
+                    self.expire_token()
+
+                    def retry(err4):
+                        if err4:
+                            on_done(None, err4)
+                            return
+                        self._send(path, body, query, multipart, need_token, make_after(False))
+
+                    self.ensure_token(retry)
+                    return
+                if err3:
+                    on_done(None, err3)
+                    return
+                on_done(payload, None)
+            return after
+
+        def proceed(err):
+            if err:
+                on_done(None, err)
+                return
+            self._send(path, body, query, multipart, need_token, make_after(True))
+
+        if need_token:
+            self.ensure_token(proceed)
+        else:
+            proceed(None)
+
+    def _send(self, path, body, query, multipart, need_token, on_done):
+        req = {"host": HOST_WHITELIST, "method": "POST" if body is not None or multipart else "GET",
+               "path": path, "query": dict(query or {}), "headers": {}, "timeout_s": 30}
+        if need_token:
+            req["query"]["access_token"] = self.token
+        if body is not None:
+            req["body"] = body
+        if multipart:
+            req["multipart"] = multipart
+        self._request(req, on_done)
+
+    # -- 业务接口 -----------------------------------------------------------
+
+    def fetch_token_probe(self, on_done):
+        """三步检测的第 ② 步：取 token（等价于账号可用性探测）。"""
+        self.expire_token()
+        self.ensure_token(on_done)
+
+    def material_count(self, on_done):
+        self.call(PATHS["material_count"], query={}, on_done=on_done)
+
+    def upload_material(self, file_path, file_bytes, mime, on_done):
+        media_id = ""
+        multipart = {"name": "media", "filename": os.path.basename(file_path),
+                     "mime": mime, "size": len(file_bytes), "content": file_bytes}
+        self.call(PATHS["material_add"], query={"type": "image"}, multipart=multipart, on_done=on_done)
+
+    def draft_add(self, articles, on_done):
+        self.call(PATHS["draft_add"], body={"articles": articles}, on_done=on_done)
+
+    def draft_batchget(self, offset, count, on_done):
+        self.call(PATHS["draft_batchget"], body={"offset": int(offset), "count": int(count),
+                                                 "no_content": 1}, on_done=on_done)
+
+    def draft_delete(self, media_id, on_done):
+        self.call(PATHS["draft_delete"], body={"media_id": media_id}, on_done=on_done)
+
+    def publish_probe(self, on_done):
+        self.call(PATHS["publish_batchget"], body={"offset": 0, "count": 1}, on_done=on_done)
+
+    def publish_submit(self, media_id, on_done):
+        self.call(PATHS["publish_submit"], body={"media_id": media_id}, on_done=on_done)
+
+    def publish_get(self, publish_id, on_done):
+        self.call(PATHS["publish_get"], body={"publish_id": publish_id}, on_done=on_done)
+
+
+# ---------------------------------------------------------------------------
+# 宿主适配（剪贴板 / 文件选择 / 打开 / 提示）
+# ---------------------------------------------------------------------------
+
+class HostAdapter:
+    """把 host 能力收敛到三个入口，便于自测替换（FakeHost）。"""
+
+    def granted(self, permission):
+        return permission in (getattr(APP, "granted_permissions", None) or [])
+
+    def copy_text(self, text, on_done=None):
+        if not self.granted("ui.clipboard.write"):
+            if on_done:
+                on_done(False, "剪贴板能力 ui.clipboard.write 未授予")
+            return
+        call_id = APP.call_capability("ui.clipboard.write", {"text": text})
+        if call_id and on_done:
+            CALL_JOBS[call_id] = ("clipboard", on_done)
+
+    def pick_file(self, kinds, on_done):
+        if not self.granted("fs.pick"):
+            on_done(False, "文件选择能力 fs.pick 未授予", None)
+            return
+        call_id = APP.call_capability("fs.pick", {"kinds": kinds, "multiple": False})
+        if call_id:
+            CALL_JOBS[call_id] = ("pick", on_done)
+        else:
+            on_done(False, "能力调用未返回 call_id", None)
+
+    def toast(self, text):
+        APP.overlay("toast", text=text)
+
+
+HOST = HostAdapter()
+CALL_JOBS = {}
+TRANSPORT = CapabilityTransport()
+STORE = Store()
+
+
+def _private_dir():
+    return getattr(APP, "private_dir", None) or None
+
+
+def _store():
+    """按宿主注入的 private_dir 惰性重建存储（initialize 之后才有值）。"""
+    global STORE
+    private = _private_dir()
+    if private and STORE.private_dir != private:
+        STORE = Store(private)
+    return STORE
+
+
+def _client():
+    creds = {"app_id": APP.state.get("app_id") or "", "secret": APP.state.get("secret") or ""}
+    return WeChatClient(TRANSPORT, _store(), creds)
+
+
+# ---------------------------------------------------------------------------
+# state 派生（纯计算，不发 IO）
+# ---------------------------------------------------------------------------
+
+def _sync_derived(state):
+    rt = state.setdefault("_rt", {})
+    page = state.get("page") if state.get("page") in PAGE_KEYS else PAGE_ORDER[0]
+    state["page"] = page
+    state["page_label"] = page
+    for name, key in PAGE_KEYS.items():
+        state[key] = (name == page)
+
+    app_id = str(state.get("app_id") or "").strip()
+    secret = str(state.get("secret") or "").strip()
+    complete = bool(app_id and secret)
+    state["account_complete"] = complete
+    state["account_incomplete"] = not complete
+    state["store_path"] = _store().account_path
+
+    state["theme_summary"] = theme_of(state.get("theme"))["summary"]
+    html_text = render_markdown(state.get("markdown_source") or "", state.get("theme"))
+    rt["html"] = html_text
+    if html_text:
+        lines = html_text.split("\n")
+        state["preview_lines"] = ("共 %d 行 HTML（复制 / 导出后可直接粘进公众号编辑器）\n" % len(lines)) \
+            + "\n".join(lines[:40])
+    else:
+        state["preview_lines"] = "（正文为空：左侧撰写 Markdown，此处实时生成微信兼容 HTML 源码）"
+
+    missing = []
+    if not str(state.get("payload_title") or "").strip():
+        missing.append("标题")
+    if not str(state.get("cover_media_id") or rt.get("cover_media_id") or "").strip():
+        missing.append("封面")
+    if not (state.get("markdown_source") or "").strip():
+        missing.append("正文")
+    state["meta_hint_present"] = bool(missing)
+    state["meta_hint"] = ("保存草稿前需补齐：%s" % " / ".join(missing)) if missing else ""
+
+    assets = state.get("assets") or []
+    drafts = state.get("drafts") or []
+    state["assets_count"] = len(assets)
+    state["drafts_count"] = len(drafts)
+
+    cover = str(state.get("cover_media_id") or rt.get("cover_id") or "").strip()
+    state["cover_value"] = cover if cover else "未选择（必填）"
+    state["link_value"] = str(state.get("content_source_url") or "")
+    state["show_cover_pic"] = bool(state.get("show_cover_pic", True))
+    state["need_open_comment"] = bool(state.get("need_open_comment", False))
+    state["only_fans_can_comment"] = bool(state.get("only_fans_can_comment", False))
+
+    state["upload_blocked"] = not TRANSPORT.available
+
+    perm = rt.get("publish_state") or "unknown"
+    state["publish_unknown"] = (perm == "unknown")
+    state["publish_probing"] = (perm == "probing")
+    state["publish_granted"] = (perm == "granted")
+    state["publish_denied"] = (perm == "denied")
+    reason = rt.get("publish_reason") or ""
+    state["publish_reason_present"] = bool(reason)
+    state["publish_reason"] = reason
+    if state["publish_unknown"] and not reason:
+        state["publish_reason"] = ("尚未探测：需先「保存凭据」并具备写类网络能力（G4）后探测 "
+                                   "freepublish 权限。")
+
+    if state["publish_granted"]:
+        options = ["未选择"] + ["%s（%s）" % (d.get("title") or "未命名", d.get("media_id") or "")
+                              for d in drafts]
+        rt["publish_options"] = options
+        target = str(state.get("publish_target") or "")
+        if target not in options:
+            state["publish_target"] = "未选择"
+    else:
+        rt["publish_options"] = ["未选择"]
+        state["publish_target"] = "未选择"
+
+    state["publish_status_present"] = bool(rt.get("publish_status"))
+    state["publish_status"] = rt.get("publish_status") or ""
+    state["account_report_present"] = bool(rt.get("account_report"))
+    state["account_report"] = rt.get("account_report") or ""
+    state["toast_visible"] = bool(rt.get("toast_visible"))
+    state["toast_text"] = rt.get("toast_text") or state.get("toast_text") or "已复制"
+    state["drafts_refreshing"] = bool(rt.get("drafts_refreshing"))
+    state["account_testing"] = bool(rt.get("account_testing"))
+    state["publish_busy"] = bool(rt.get("publish_busy"))
+    state["busy"] = bool(rt.get("busy") or state["drafts_refreshing"]
+                         or state["account_testing"] or state["publish_busy"])
+    state["confirm_delete"] = bool(rt.get("confirm_delete"))
+    state["delete_target_title"] = rt.get("delete_target_title") or ""
+    return state
+
+
+def _notice(state, text, is_error=False):
+    state["notice_text"] = text
+    state["notice_is_error"] = bool(is_error)
+
+
+def _toast(state, text):
+    rt = state.setdefault("_rt", {})
+    rt["toast_text"] = text
+    rt["toast_visible"] = True
+    HOST.toast(text)
+
+
+def _push():
+    try:
+        APP.push()
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# 事件取值：payload / ui_state 双来源（宿主形态差异防御）
+# ---------------------------------------------------------------------------
+
+def _coerce(key, value):
+    if key in ("show_cover_pic", "need_open_comment", "only_fans_can_comment"):
+        if isinstance(value, str):
+            return value.strip().lower() in ("1", "true", "yes", "on", "是")
+        return bool(value)
+    return value
+
+
+def _absorb(envelope, state):
+    """把表单交互态（宿主 ui_state / payload）并入 state；返回命中的字段名集合。"""
+    hits = set()
+    sources = []
+    payload = envelope.get("payload") or {}
+    ui_state = envelope.get("ui_state") or {}
+    for src in (ui_state, payload):
+        if isinstance(src, dict):
+            sources.append(src)
+            for nested in ("values", "fields", "form", "form_values"):
+                if isinstance(src.get(nested), dict):
+                    sources.append(src[nested])
+    for src in sources:
+        for raw_key in FORM_FIELD_KEYS:
+            if raw_key not in src:
+                continue
+            value = _coerce(raw_key, src.get(raw_key))
+            if value is None:
+                continue
+            key = FIELD_TO_STATE.get(raw_key, raw_key)
+            state[key] = value
+            hits.add(key)
+    return hits
+
+
+def _node_item(envelope, state, key="assets"):
+    """卡片动作的条目定位：payload.item → payload.index → ui_state 选择 → node_id 序号。
+
+    渲染器对列表行**行内事件**只补 `index`（不携带 item，见 NodeRenderer.listView），
+    故 `payload.index` 是真实链路的主定位键；`#<n>` 后缀仅作兼容。
+    """
+    payload = envelope.get("payload") or {}
+    item = payload.get("item") or payload.get("row") or payload.get("value")
+    if isinstance(item, dict):
+        return item
+    rows = {
+        "assets": state.get("assets") or [],
+        "drafts": state.get("drafts") or [],
+    }.get(key) or []
+    try:
+        row_index = int(payload.get("index"))
+    except (TypeError, ValueError):
+        row_index = None
+    if row_index is not None and 0 <= row_index < len(rows):
+        return rows[row_index]
+    ui_state = envelope.get("ui_state") or {}
+    selected = ui_state.get("selected_item") or ui_state.get("selection")
+    if isinstance(selected, dict):
+        return selected
+    node_id = str(envelope.get("node_id") or "")
+    m = re.search(r"[#:](\d+)$", node_id)
+    if m:
+        idx = int(m.group(1))
+        if 0 <= idx < len(rows):
+            return rows[idx]
+    for candidate in (payload.get("media_id"), payload.get("id")):
+        if candidate:
+            for row in rows:
+                if row.get("media_id") == candidate:
+                    return row
+    return None
+
+
+# ---------------------------------------------------------------------------
+# 业务动作
+# ---------------------------------------------------------------------------
+
+def act_page_change(state, envelope):
+    _absorb(envelope, state)
+    page = state.get("page")
+    if page not in PAGE_KEYS:
+        page = PAGE_ORDER[0]
+        state["page"] = page
+    _notice(state, "已切换到「%s」页" % page)
+    return state
+
+
+def act_account_change(state, envelope):
+    hits = _absorb(envelope, state)
+    if not hits:
+        for key in ("app_id", "app_secret", "secret"):
+            if key in (envelope.get("payload") or {}):
+                state[FIELD_TO_STATE.get(key, key)] = (envelope["payload"] or {})[key]
+    if state.get("app_id") or state.get("secret"):
+        _notice(state, "凭据未保存：点「保存凭据」写入本机私有目录（0600）")
+    return state
+
+
+def act_save_credentials(state, envelope):
+    _absorb(envelope, state)
+    app_id = str(state.get("app_id") or "").strip()
+    secret = str(state.get("secret") or "").strip()
+    if not app_id or not secret:
+        _notice(state, "保存失败：AppID 与 AppSecret 均为必填", True)
+        return state
+    path = _store().save_account(app_id, secret)
+    state["app_id"] = app_id
+    state["secret"] = secret
+    state["store_path"] = path
+    rt = state.setdefault("_rt", {})
+    rt["publish_state"] = "unknown"
+    rt["publish_reason"] = ""
+    rt["account_report"] = ""
+    _notice(state, "凭据已保存到私有目录（0600）：%s" % path)
+    _log("save_credentials app_id_len=%d → %s" % (len(app_id), path))
+    return state
+
+
+def _report_line(idx, title, ok, detail):
+    return "%s. %s %s —— %s" % (idx, "✓" if ok else "•", title, detail)
+
+
+def act_test_connection(state, envelope):
+    _absorb(envelope, state)
+    app_id = str(state.get("app_id") or "").strip()
+    secret = str(state.get("secret") or "").strip()
+    rt = state.setdefault("_rt", {})
+    if not app_id or not secret:
+        _notice(state, "测试连接失败：请先填写并保存 AppID / AppSecret", True)
+        return state
+    lines = []
+    lines.append(_report_line(1, "凭据完整性", True, "AppID %s…（%d 位）/ AppSecret 已填写"
+                              % (app_id[:6], len(app_id))))
+    store = _store()
+    lines.append(_report_line(2, "凭据落盘", True, "私有目录 0600：%s%s"
+                              % (store.account_path,
+                                 "（含旧目录接管）" if store.adopted_from_legacy else "")))
+    if not TRANSPORT.available:
+        lines.append(_report_line(3, "接口连通", False,
+                                  "未执行 —— %s" % TRANSPORT.why_unavailable()))
+        rt["account_report"] = "\n".join(lines)
+        rt["publish_state"] = "unknown"
+        rt["publish_reason"] = "写类网络能力（G4）未授予，未发起 freepublish 探测。"
+        _notice(state, "测试连接未执行：写类网络能力（G4）未授予（详见三步检测报告）", True)
+        return state
+
+    rt["account_testing"] = True
+    _notice(state, "正在测试连接…")
+
+    def after_token(err):
+        rt["account_testing"] = False
+        if err:
+            lines.append(_report_line(3, "接口连通", False, err.message))
+            rt["account_report"] = "\n".join(lines)
+            rt["publish_state"] = "unknown"
+            rt["publish_reason"] = err.message
+            _notice(state, "测试连接失败：%s" % err.message, True)
+            _push()
+            return
+        lines.append(_report_line(3, "接口连通", True, "access_token 获取成功（有效期约 2 小时）"))
+        rt["account_report"] = "\n".join(lines)
+
+        def after_probe(payload, err2):
+            if err2:
+                if err2.code in NO_PERMISSION_CODES:
+                    rt["publish_state"] = "denied"
+                    rt["publish_reason"] = ("发布能力不可用：%s；按契约已隐藏发布入口，"
+                                            "仅保留草稿箱能力。" % err2.message)
+                else:
+                    rt["publish_state"] = "unknown"
+                    rt["publish_reason"] = "freepublish 探测失败：%s" % err2.message
+                _notice(state, rt["publish_reason"], err2.code not in NO_PERMISSION_CODES)
+            else:
+                rt["publish_state"] = "granted"
+                rt["publish_reason"] = "freepublish/submit 权限可用，可提交发布。"
+                _notice(state, "连接正常：发布能力可用（freepublish）")
+            _push()
+
+        _client().publish_probe(after_probe)
+
+    _client().fetch_token_probe(after_token)
+    return state
+
+
+def act_copy_notice(state, envelope):
+    text = state.get("notice_text") or ""
+
+    def done(ok, message):
+        # 复制动作只回 toast，不改写被复制的提示文本（否则剪贴板内容与界面提示不一致）
+        _toast(state, "已复制提示" if ok else message)
+        _push()
+
+    HOST.copy_text(text, done)
+    return state
+
+
+def act_copy_store_path(state, envelope):
+    path = _store().account_path
+    HOST.copy_text(path, lambda ok, msg: (_toast(state, "已复制路径" if ok else msg), _push()))
+    return state
+
+
+def act_copy_account_report(state, envelope):
+    text = (state.get("_rt") or {}).get("account_report") or ""
+    if not text:
+        _notice(state, "暂无可复制的检测报告，请先「测试连接」", True)
+        return state
+    HOST.copy_text(text, lambda ok, msg: (_toast(state, "已复制检测报告" if ok else msg), _push()))
+    return state
+
+
+def act_theme_change(state, envelope):
+    _absorb(envelope, state)
+    if state.get("theme") not in THEMES:
+        state["theme"] = DEFAULT_THEME
+    _notice(state, "排版主题：%s" % state["theme"])
+    return state
+
+
+def act_markdown_change(state, envelope):
+    _absorb(envelope, state)
+    _notice(state, "已更新正文（%d 字，实时生成微信兼容 HTML）" % len(state.get("markdown_source") or ""))
+    return state
+
+
+def act_meta_change(state, envelope):
+    _absorb(envelope, state)
+    return state
+
+
+def _copy_html(state, what="正文 HTML"):
+    rt = state.setdefault("_rt", {})
+    html_text = rt.get("html") or ""
+    if not html_text:
+        _notice(state, "正文为空，无法复制 HTML", True)
+        return state
+    HOST.copy_text(html_text, lambda ok, msg: (
+        _toast(state, "已复制%s" % what if ok else msg), _push()))
+    _notice(state, "已请求复制%s（%d 字符）" % (what, len(html_text)))
+    return state
+
+
+def act_copy_html(state, envelope):
+    return _copy_html(state)
+
+
+def act_export_html(state, envelope):
+    rt = state.setdefault("_rt", {})
+    html_text = rt.get("html") or ""
+    if not html_text:
+        _notice(state, "正文为空，无法导出 HTML", True)
+        return state
+    store = _store()
+    safe_title = re.sub(r"[^\w\u4e00-\u9fa5-]+", "_", (state.get("payload_title") or "wechat-draft"))[:40]
+    path = os.path.join(store.export_dir, "%s-%s.html" % (safe_title or "draft", _stamp()))
+    _write_private(path, html_text)
+    rt["export_path"] = path
+    sha = hashlib.sha256(html_text.encode("utf-8")).hexdigest()[:12]
+    HOST.copy_text(path, lambda ok, msg: (_toast(state, "已复制导出路径" if ok else msg), _push()))
+    _notice(state, "已导出 HTML 到私有目录：%s（sha256 %s…）" % (path, sha))
+    _log("export_html → %s" % path)
+    return state
+
+
+def act_open_html(state, envelope):
+    rt = state.setdefault("_rt", {})
+    path = rt.get("export_path")
+    if not path:
+        act_export_html(state, envelope)
+        path = rt.get("export_path")
+    if not path:
+        return state
+    _notice(state, "「用系统打开」需底座提供外部程序打开能力，当前未开放（与 G4 一并待立项）；"
+                   "路径已复制，可在 Finder 中打开：%s" % path, True)
+    return state
+
+
+def _stamp():
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def act_save_draft(state, envelope):
+    _absorb(envelope, state)
+    app_id = str(state.get("app_id") or "").strip()
+    if not app_id or not state.get("secret"):
+        _notice(state, "保存草稿失败：请先在「账号」页保存凭据", True)
+        return state
+    if not TRANSPORT.available:
+        _notice(state, "保存草稿未执行：%s" % TRANSPORT.why_unavailable(), True)
+        return state
+    missing = []
+    if not str(state.get("payload_title") or "").strip():
+        missing.append("标题")
+    cover = str(state.get("cover_media_id") or (state.get("_rt") or {}).get("cover_id") or "").strip()
+    if not cover:
+        missing.append("封面素材（先在「素材」页上传并「设为封面」）")
+    if not (state.get("markdown_source") or "").strip():
+        missing.append("正文")
+    if missing:
+        _notice(state, "保存草稿失败，还缺：%s" % " / ".join(missing), True)
+        return state
+    rt = state.setdefault("_rt", {})
+    rt["busy"] = True
+    _notice(state, "正在保存草稿…")
+    article = build_article(state, cover)
+    _log("draft_add body_keys=%s bytes=%d" % (",".join(sorted(article.keys())),
+                                              len(json.dumps(article, ensure_ascii=False).encode("utf-8"))))
+
+    def after(payload, err):
+        rt["busy"] = False
+        if err:
+            _notice(state, "保存草稿失败：%s" % err.message, True)
+            _push()
+            return
+        media_id = str(payload.get("media_id") or "")
+        _notice(state, "已保存到草稿箱（media_id %s）" % (media_id or "未返回"))
+        _push()
+        _refresh_drafts_inner(state, act_after=True)
+
+    _client().draft_add([article], after)
+    return state
+
+
+def build_article(state, cover_media_id):
+    """微信草稿 article 结构（字段口径对齐 v1 DraftPayload.jsonObject）。"""
+    return {
+        "title": str(state.get("payload_title") or "").strip(),
+        "author": str(state.get("payload_author") or "").strip(),
+        "digest": str(state.get("payload_digest") or "").strip(),
+        "content": (state.get("_rt") or {}).get("html") or "",
+        "content_source_url": str(state.get("content_source_url") or "").strip(),
+        "thumb_media_id": cover_media_id,
+        "show_cover_pic": 1 if state.get("show_cover_pic", True) else 0,
+        "need_open_comment": 1 if state.get("need_open_comment") else 0,
+        "only_fans_can_comment": 1 if state.get("only_fans_can_comment") else 0,
+    }
+
+
+def act_refresh_drafts(state, envelope):
+    return _refresh_drafts_inner(state, act_after=False)
+
+
+def _refresh_drafts_inner(state, act_after):
+    rt = state.setdefault("_rt", {})
+    if not TRANSPORT.available:
+        _notice(state, "刷新草稿未执行：%s" % TRANSPORT.why_unavailable(), True)
+        return state
+    rt["drafts_refreshing"] = True
+    _notice(state, "正在刷新草稿列表…")
+
+    def after(payload, err):
+        rt["drafts_refreshing"] = False
+        if err:
+            _notice(state, "刷新草稿失败：%s" % err.message, True)
+            _push()
+            return
+        items = payload.get("item") or []
+        rows = []
+        for item in items[:20]:
+            content = item.get("content") or {}
+            news = (content.get("news_item") or [{}])[0]
+            rows.append({
+                "media_id": str(item.get("media_id") or ""),
+                "title": str(news.get("title") or "未命名"),
+                "digest": str(news.get("digest") or ""),
+                "updated_at": _fmt_ts(item.get("update_time")),
+                "url": str(news.get("url") or ""),
+            })
+        state["drafts"] = rows
+        total = payload.get("total_count")
+        _notice(state, "草稿列表已刷新：%d 条%s" % (len(rows),
+                  "（共 %s 条）" % total if total is not None else ""))
+        _log("draft_batchget → %d 条" % len(rows))
+        _push()
+
+    _client().draft_batchget(0, 20, after)
+    return state
+
+
+def _fmt_ts(value):
+    try:
+        return datetime.fromtimestamp(int(value)).strftime("%Y-%m-%d %H:%M")
+    except (TypeError, ValueError, OSError):
+        return ""
+
+
+def act_select_draft(state, envelope):
+    item = _node_item(envelope, state, key="drafts")
+    if not item:
+        _notice(state, "未识别到选中的草稿", True)
+        return state
+    state["publish_target"] = "%s（%s）" % (item.get("title") or "未命名", item.get("media_id") or "")
+    (state.setdefault("_rt", {}))["selected_draft"] = item
+    _notice(state, "已选中草稿《%s》" % (item.get("title") or "未命名"))
+    return state
+
+
+def act_use_draft_as_target(state, envelope):
+    item = _node_item(envelope, state, key="drafts")
+    if not item:
+        _notice(state, "未识别到草稿条目", True)
+        return state
+    state["publish_target"] = "%s（%s）" % (item.get("title") or "未命名", item.get("media_id") or "")
+    (state.setdefault("_rt", {}))["selected_draft"] = item
+    _notice(state, "发布目标已设为《%s》" % (item.get("title") or "未命名"))
+    return state
+
+
+def act_delete_draft(state, envelope):
+    item = _node_item(envelope, state, key="drafts")
+    if not item:
+        _notice(state, "未识别到待删除草稿", True)
+        return state
+    rt = state.setdefault("_rt", {})
+    rt["delete_item"] = item
+    rt["delete_target_title"] = item.get("title") or "未命名"
+    rt["confirm_delete"] = True
+    _notice(state, "待确认：删除草稿《%s》（删除不可撤销）" % rt["delete_target_title"])
+    return state
+
+
+def act_confirm_delete_draft(state, envelope):
+    rt = state.setdefault("_rt", {})
+    item = rt.get("delete_item") or {}
+    rt["confirm_delete"] = False
+    if not item:
+        _notice(state, "无待删除草稿", True)
+        return state
+    if not TRANSPORT.available:
+        _notice(state, "删除草稿未执行：%s" % TRANSPORT.why_unavailable(), True)
+        return state
+    media_id = item.get("media_id") or ""
+    _log("draft_delete body_keys=media_id media_id_len=%d" % len(media_id))
+
+    def after(payload, err):
+        if err:
+            _notice(state, "删除草稿失败：%s" % err.message, True)
+            _push()
+            return
+        state["drafts"] = [d for d in (state.get("drafts") or []) if d.get("media_id") != media_id]
+        _notice(state, "已删除草稿《%s》" % (item.get("title") or "未命名"))
+        _push()
+
+    _client().draft_delete(media_id, after)
+    return state
+
+
+def act_cancel_delete_draft(state, envelope):
+    rt = state.setdefault("_rt", {})
+    rt["confirm_delete"] = False
+    rt["delete_item"] = None
+    _notice(state, "已取消删除")
+    return state
+
+
+def act_upload_asset(state, envelope):
+    rt = state.setdefault("_rt", {})
+    if not TRANSPORT.available:
+        _notice(state, "上传未执行：%s" % TRANSPORT.why_unavailable(), True)
+        return state
+
+    def picked(ok, message, path):
+        if not ok or not path:
+            _notice(state, "上传取消：%s" % message, True)
+            _push()
+            return
+        try:
+            with open(path, "rb") as handle:
+                data = handle.read()
+        except OSError as exc:
+            _notice(state, "读取本地文件失败：%s" % exc, True)
+            _push()
+            return
+        if len(data) > MULTIPART_LIMIT_BYTES:
+            _notice(state, "上传失败：单张图片不得超过 10MB（当前 %.1fMB）"
+                    % (len(data) / 1048576.0), True)
+            _push()
+            return
+        mime = "image/png" if path.lower().endswith(".png") else "image/jpeg"
+        rt["busy"] = True
+        _notice(state, "正在上传素材…")
+
+        def after(payload, err):
+            rt["busy"] = False
+            if err:
+                _notice(state, "上传失败：%s" % err.message, True)
+                _push()
+                return
+            media_id = str(payload.get("media_id") or "")
+            url = str(payload.get("url") or "")
+            state.setdefault("assets", []).append({
+                "file_name": os.path.basename(path),
+                "media_id": media_id,
+                "url": url,
+                "uploaded_at": _now_text(),
+            })
+            _notice(state, "已上传到永久素材：%s" % (os.path.basename(path)))
+            _log("material_add media_id_len=%d" % len(media_id))
+            _push()
+
+        _client().upload_material(path, data, mime, after)
+
+    HOST.pick_file(["image"], picked)
+    return state
+
+
+def act_use_asset_as_cover(state, envelope):
+    item = _node_item(envelope, state, key="assets")
+    if not item:
+        _notice(state, "未识别到素材条目", True)
+        return state
+    (state.setdefault("_rt", {}))["cover_id"] = item.get("media_id") or ""
+    state["cover_media_id"] = item.get("media_id") or ""
+    _notice(state, "封面已设为 %s" % (item.get("file_name") or item.get("media_id") or ""))
+    return state
+
+
+def act_copy_asset_media_id(state, envelope):
+    item = _node_item(envelope, state, key="assets")
+    if not item:
+        _notice(state, "未识别到素材条目", True)
+        return state
+    media_id = item.get("media_id") or ""
+    HOST.copy_text(media_id, lambda ok, msg: (_toast(state, "已复制 media_id" if ok else msg), _push()))
+    _notice(state, "已复制 media_id：%s" % media_id)
+    return state
+
+
+def act_refresh_publish_permission(state, envelope):
+    rt = state.setdefault("_rt", {})
+    if not TRANSPORT.available:
+        rt["publish_state"] = "unknown"
+        rt["publish_reason"] = TRANSPORT.why_unavailable()
+        _notice(state, "无法探测发布权限：%s" % TRANSPORT.why_unavailable(), True)
+        return state
+    rt["publish_state"] = "probing"
+    _notice(state, "正在探测 freepublish 权限…")
+
+    def after(payload, err):
+        if err:
+            if err.code in NO_PERMISSION_CODES:
+                rt["publish_state"] = "denied"
+                rt["publish_reason"] = ("发布能力不可用：%s；已按契约隐藏发布入口，仅保留草稿箱。"
+                                        % err.message)
+            else:
+                rt["publish_state"] = "unknown"
+                rt["publish_reason"] = "探测失败：%s" % err.message
+            _notice(state, rt["publish_reason"], err.code not in NO_PERMISSION_CODES)
+        else:
+            rt["publish_state"] = "granted"
+            rt["publish_reason"] = "freepublish/submit 权限可用，可提交发布。"
+            _notice(state, "发布能力可用（freepublish）")
+        _push()
+
+    _client().publish_probe(after)
+    return state
+
+
+def act_publish_form_change(state, envelope):
+    _absorb(envelope, state)
+    return state
+
+
+def act_submit_publish(state, envelope):
+    _absorb(envelope, state)
+    rt = state.setdefault("_rt", {})
+    draft = rt.get("selected_draft")
+    if not draft:
+        _notice(state, "提交发布失败：请先在「草稿」页选中目标草稿", True)
+        return state
+    if not TRANSPORT.available:
+        _notice(state, "提交发布未执行：%s" % TRANSPORT.why_unavailable(), True)
+        return state
+    if rt.get("publish_state") != "granted":
+        _notice(state, "提交发布前需先探测到发布权限（当前：%s）" % (rt.get("publish_state") or "unknown"), True)
+        return state
+    rt["publish_busy"] = True
+    _notice(state, "正在提交发布…")
+    media_id = draft.get("media_id") or ""
+    _log("freepublish/submit body_keys=media_id media_id_len=%d" % len(media_id))
+
+    def after(payload, err):
+        rt["publish_busy"] = False
+        if err:
+            _notice(state, "提交发布失败：%s" % err.message, True)
+            _push()
+            return
+        publish_id = str(payload.get("publish_id") or "")
+        rt["publish_id"] = publish_id
+        state["publish_id"] = publish_id
+        rt["publish_status"] = "已提交（publish_id %s），审核结果请用「查询发布状态」轮询" % publish_id
+        _notice(state, "已提交发布：《%s》" % (draft.get("title") or "未命名"))
+        _push()
+
+    _client().publish_submit(media_id, after)
+    return state
+
+
+def act_query_publish_status(state, envelope):
+    _absorb(envelope, state)
+    rt = state.setdefault("_rt", {})
+    publish_id = str(state.get("publish_id") or rt.get("publish_id") or "").strip()
+    if not publish_id:
+        _notice(state, "查询失败：请先提交发布或填写 publish_id", True)
+        return state
+    if not TRANSPORT.available:
+        _notice(state, "查询发布状态未执行：%s" % TRANSPORT.why_unavailable(), True)
+        return state
+    rt["publish_busy"] = True
+    _notice(state, "正在查询发布状态…")
+
+    def after(payload, err):
+        rt["publish_busy"] = False
+        if err:
+            _notice(state, "查询发布状态失败：%s" % err.message, True)
+            _push()
+            return
+        raw_status = payload.get("publish_status")
+        status = "" if raw_status is None else str(raw_status)
+        label = {"0": "已成功", "1": "正在发布", "2": "原创失败", "3": "常规失败",
+                 "4": "平台审核", "5": "审核失败", "6": "已删除"}.get(status, "")
+        detail = payload.get("fail_idx") or payload.get("article_detail") or ""
+        rt["publish_status"] = "publish_status=%s%s%s" % (
+            status or "未知", "（%s）" % label if label else "",
+            " article_detail=%s" % json.dumps(detail, ensure_ascii=False) if detail else "")
+        _notice(state, "发布状态：%s" % rt["publish_status"])
+        _push()
+
+    _client().publish_get(publish_id, after)
+    return state
+
+
+def act_copy_publish_status(state, envelope):
+    text = (state.get("_rt") or {}).get("publish_status") or ""
+    if not text:
+        _notice(state, "暂无发布状态可复制", True)
+        return state
+    HOST.copy_text(text, lambda ok, msg: (_toast(state, "已复制发布状态" if ok else msg), _push()))
+    _notice(state, "已复制发布状态")
+    return state
+
+
+# ---------------------------------------------------------------------------
+# 渲染
+# ---------------------------------------------------------------------------
+
+PADDING = 16
+
+
+def _text(node_id, value, style="body", lines=None, color=None):
+    props = {"value": value, "style": style}
+    if lines:
+        props["lines"] = lines
+    if color:
+        props["color"] = color
+    return {"type": "text", "id": node_id, "props": props}
+
+
+def _fallback_root(state):
+    """包内 UI 声明不可用时的最小骨架（显式提示，不静默降级）。"""
+    return {
+        "type": "container",
+        "id": "root",
+        "props": {"direction": "vertical", "gap": 14, "padding": PADDING},
+        "children": [
+            _text("app_title", "微信公众号", "title"),
+            _text("load_error", "包内 UI 声明不可用：%s" % (UI_LOAD_NOTE or "未知原因"), "caption", 3),
+            _text("notice_text_normal", "{{state.notice_text}}", "body", 3),
+            _text("account_store_path", "存储位置：{{state.store_path}}", "caption", 2),
+            _text("media_count", "共 {{state.assets_count}} 个素材", "caption"),
+            _text("drafts_count", "共 {{state.drafts_count}} 条草稿", "caption"),
+        ],
+    }
+
+
+def build_root(state):
+    """按 state 产出 UI root：包内骨架（ui/main.json）+ 数据面（纯函数，不做 IO）。"""
+    _sync_derived(state)
+    if not isinstance(UI_BASE, dict):
+        return _fallback_root(state)
+    return copy.deepcopy(UI_BASE)
+
+
+def render(state):
+    """SDK render 钩子：宿主每帧取 root（状态派生在此收敛）。"""
+    return build_root(state)
+
+
+# ---------------------------------------------------------------------------
+# 事件绑定
+# ---------------------------------------------------------------------------
+
+HANDLERS = {
+    "page_change": (act_page_change, "change"),
+    "account_change": (act_account_change, "change"),
+    "save_credentials": (act_save_credentials, "tap"),
+    "test_connection": (act_test_connection, "tap"),
+    "copy_notice": (act_copy_notice, "tap"),
+    "copy_store_path": (act_copy_store_path, "tap"),
+    "copy_account_report": (act_copy_account_report, "tap"),
+    "theme_change": (act_theme_change, "change"),
+    "markdown_change": (act_markdown_change, "change"),
+    "meta_change": (act_meta_change, "change"),
+    "copy_html": (act_copy_html, "tap"),
+    "export_html": (act_export_html, "tap"),
+    "open_html": (act_open_html, "tap"),
+    "save_draft": (act_save_draft, "tap"),
+    "upload_asset": (act_upload_asset, "tap"),
+    "refresh_drafts": (act_refresh_drafts, "tap"),
+    "select_draft": (act_select_draft, "select"),
+    "use_draft_as_target": (act_use_draft_as_target, "action"),
+    "delete_draft": (act_delete_draft, "action"),
+    "confirm_delete_draft": (act_confirm_delete_draft, "confirm"),
+    "cancel_delete_draft": (act_cancel_delete_draft, "cancel"),
+    "use_asset_as_cover": (act_use_asset_as_cover, "action"),
+    "copy_asset_media_id": (act_copy_asset_media_id, "action"),
+    "refresh_publish_permission": (act_refresh_publish_permission, "tap"),
+    "publish_form_change": (act_publish_form_change, "change"),
+    "submit_publish": (act_submit_publish, "tap"),
+    "query_publish_status": (act_query_publish_status, "tap"),
+    "copy_publish_status": (act_copy_publish_status, "tap"),
+}
+
+# 节点 → 动作名（宿主按 node_id + event 派发；表内为 UI 文档声明的绑定）
+NODE_ACTIONS = {
+    "nav_form": ("page_change", "change"),
+    "account_form": ("save_credentials", "submit"),
+    "composer_source_form": ("markdown_change", "change"),
+    "composer_meta_form": ("save_draft", "submit"),
+    "theme_form": ("theme_change", "change"),
+    "drafts_list": ("select_draft", "select"),
+    "publish_form": ("query_publish_status", "submit"),
+    "media_row": ("use_asset_as_cover", "action"),
+    "drafts_row": ("use_draft_as_target", "action"),
+    "dialog_confirm_delete": ("confirm_delete_draft", "confirm"),
+}
+TAP_NODES = {
+    "btn_refresh_drafts": "refresh_drafts",
+    "btn_save_credentials": "save_credentials",
+    "btn_test_connection": "test_connection",
+    "btn_copy_notice": "copy_notice",
+    "btn_copy_store_path": "copy_store_path",
+    "btn_copy_report": "copy_account_report",
+    "btn_copy_html": "copy_html",
+    "btn_export_html": "export_html",
+    "btn_open_html": "open_html",
+    "btn_save_draft": "save_draft",
+    "btn_upload_asset": "upload_asset",
+    "btn_refresh_drafts_list": "refresh_drafts",
+    "btn_refresh_draft_options": "refresh_drafts",
+    "btn_reprobe_permission": "refresh_publish_permission",
+    "btn_submit_publish": "submit_publish",
+    "btn_query_publish": "query_publish_status",
+    "btn_copy_publish_status": "copy_publish_status",
+}
+CHANGE_NODES = {
+    "nav_form": "page_change",
+    "account_form": "account_change",
+    "theme_form": "theme_change",
+    "composer_source_form": "markdown_change",
+    "composer_meta_form": "meta_change",
+    "publish_form": "publish_form_change",
+}
+ACTION_FALLBACK = {
+    "use_asset_as_cover": act_use_asset_as_cover,
+    "copy_asset_media_id": act_copy_asset_media_id,
+    "use_draft_as_target": act_use_draft_as_target,
+    "delete_draft": act_delete_draft,
+}
+
+
+def _dispatch(state, envelope):
+    node_id = str(envelope.get("node_id") or "")
+    event = str(envelope.get("event") or "")
+    base = node_id.split("#")[0]
+    payload = envelope.get("payload") or {}
+
+    action = None
+    if event == "tap" and base in TAP_NODES:
+        action = TAP_NODES[base]
+    elif event == "change" and base in CHANGE_NODES:
+        action = CHANGE_NODES[base]
+    elif event in ("submit",) and base == "account_form":
+        action = "save_credentials"
+    elif event in ("submit",) and base == "composer_meta_form":
+        action = "save_draft"
+    elif event in ("submit",) and base == "publish_form":
+        action = "query_publish_status"
+    elif event in ("select",) and base in ("drafts_list", "drafts_row"):
+        action = "select_draft"
+    elif event in ("confirm",) and base == "dialog_confirm_delete":
+        action = "confirm_delete_draft"
+    elif event in ("cancel",) and base == "dialog_confirm_delete":
+        action = "cancel_delete_draft"
+    elif event in ("action", "menu", "custom") and isinstance(payload.get("action"), str):
+        action = payload["action"]
+    elif base in ("media_row", "drafts_row") and isinstance(payload.get("action"), str):
+        action = payload["action"]
+
+    fn = None
+    if action:
+        fn = HANDLERS.get(action, (None, None))[0] or ACTION_FALLBACK.get(action)
+    if fn is None:
+        _absorb(envelope, state)
+        APP.log("warn", "未识别的事件 %s@%s" % (node_id, event))
+        _notice(state, "未识别的操作：%s@%s" % (node_id, event), True)
+        return state
+    return fn(state, envelope)
+
+
+def on_event(envelope):
+    """兜底事件入口：SDK 未命中 (node_id, event) 绑定时调用。"""
+    return _dispatch(APP.state, envelope)
+
+
+def _register():
+    """把 UI 文档声明的绑定注册到 SDK（宿主按 (node_id, event) 命中）。"""
+    for node_id, (action, event) in NODE_ACTIONS.items():
+        fn = HANDLERS.get(action, (None, None))[0]
+        if fn is not None:
+            APP.bind(node_id, event, fn)
+    for node_id, action in TAP_NODES.items():
+        fn = HANDLERS.get(action, (None, None))[0]
+        if fn is not None:
+            APP.bind(node_id, "tap", fn)
+    # 列表行 / 卡片动作（node_id 带 #序号，绑定前缀兜底由 on_event 处理）
+
+
+# ---------------------------------------------------------------------------
+# 能力应答
+# ---------------------------------------------------------------------------
+
+def on_capability_result(call_id, result, error):
+    if TRANSPORT.resolve(call_id, result, error):
+        return
+    job = CALL_JOBS.pop(call_id, None)
+    if job is None:
+        return
+    kind = job[0] if isinstance(job, tuple) else None
+    if kind == "clipboard":
+        cb = job[1]
+        cb(not error, "复制成功" if not error else "复制失败：%s" % (error or {}).get("message", ""))
+    elif kind == "pick":
+        cb = job[1]
+        path = ""
+        if not error and isinstance(result, dict):
+            files = result.get("files") or result.get("paths") or []
+            if isinstance(files, list) and files:
+                first = files[0]
+                path = first.get("path") if isinstance(first, dict) else str(first)
+            path = path or result.get("path") or ""
+        if error:
+            cb(False, str((error or {}).get("message") or "文件选择失败"), None)
+        elif not path:
+            cb(False, "未选择文件", None)
+        else:
+            cb(True, "已选择 %s" % path, path)
+    _push()
+
+
+# ---------------------------------------------------------------------------
+# 启动
+# ---------------------------------------------------------------------------
+
+INITIAL_STATE = dict(STATE_SNAPSHOT)
+INITIAL_STATE["_rt"] = {}
+INITIAL_STATE["show_cover_pic"] = bool(INITIAL_STATE.get("show_cover_pic", True))
+
+APP = brick_sdk.BrickApp(render=render, state=INITIAL_STATE, on_event=on_event,
+                         on_capability_result=on_capability_result, name=APP_NAME)
+_register()
+
+
+if __name__ == "__main__":
+    raise SystemExit(brick_sdk.serve(APP))

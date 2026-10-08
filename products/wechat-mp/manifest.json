@@ -1,32 +1,54 @@
 {
-  "schema": "brick-app/v1",
-  "id": "com.shadeling.brick.wechat-mp",
+  "schema": "brick-app/v2",
+  "brick_id": "com.shadeling.brick.wechat-mp",
   "name": "wechat-mp",
   "title": "微信公众号",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "author": "Shadeling",
-  "summary": "微信公众号运营助手：Markdown 排版、永久素材上传、草稿管理与发布。",
+  "summary": "微信公众号运营助手：Markdown 排版、永久素材上传、草稿管理与发布（声明式 UI + Python 逻辑进程）。",
   "kind": "product",
-  "bundle": "WeChatMP.app",
-  "icon": "icon.png",
-  "min_os": "15.0",
+  "nav": {
+    "view_id": "wechat_mp",
+    "title": "微信公众号",
+    "icon": "doc.fill",
+    "order": 110
+  },
+  "ui": {
+    "engine": "shadeling-ui/1",
+    "entry": "ui/main.json",
+    "theme": "brick-light"
+  },
+  "logic": {
+    "protocol": "jsonrpc-stdio/1",
+    "entry": "logic/wechat_mp",
+    "runtime": "python3",
+    "args": [],
+    "env": {},
+    "sha256": "0d14f6269e1f25e9b9001aee97568830dbe6761e5060c5b42bc738d3510ca7dd"
+  },
   "permissions": [
     "network",
     "ui.clipboard.write",
     "fs.pick"
   ],
+  "quota": {
+    "ui_events_per_sec": 30,
+    "max_nodes": 2000,
+    "storage_mb": 128,
+    "rss_mb": 512
+  },
   "permission_risks": [
     {
       "permission": "network",
       "level": "app-level",
       "status": "declared",
-      "note": "应用级用途声明：应用自身直连网络（非 agent 能力、不进桥令牌），仅留档"
+      "note": "应用级用途声明（v1 遗留）：v2 中 network 不再授予直连能力，仅作「需要联网」的市场提示标记（契约 §3.3 权限段）；逻辑进程出网一律走桥能力（只读 agent.web / 受控写 agent.web.write）"
     },
     {
       "permission": "ui.clipboard.write",
       "level": "low",
       "status": "declared",
-      "note": "复制排版结果到剪贴板；低危，安装确认页默认勾选"
+      "note": "复制排版结果 / 发布状态到剪贴板；低危，安装确认页默认勾选；写入内容在事件日志中留痕"
     },
     {
       "permission": "fs.pick",
@@ -41,20 +63,20 @@
       "note": "T1 核查结论：逻辑进程可直读 fs.pick 返回路径，无需单独声明（契约 §1 已补授权语义）"
     },
     {
-      "permission": "agent.web.upload",
+      "permission": "agent.web.write",
       "level": "high",
       "status": "pending",
-      "note": "写类网络（永久素材上传 / 草稿增删 / 发布提交）高危；能力名待契约评审（G4），未落地前不得写入 permissions（本名仅占位标注）"
+      "note": "受控网络写（受控 GET/POST + 受控 multipart；原暂称 agent.web.upload）：2026-10-09 评审通过并立项（brick-vault specs/受控网络写能力评审-2026-10-09.md；契约 §5.2 权限清单 / §5.3.8 逐能力 I/O 契约），但底座侧落地清单 §6 第 1~5 项（权限枚举 / 桥 handler / 审计留痕 / 高危首调确认 UI / 安装期已知值闸门同步）尚未实现，按评审 §6 保持 pending、不写入 permissions（未登记枚举写入会被安装期未知值闸门拒装）；logic 侧已按「能力未就绪」路径实现明确降级"
     },
     {
       "permission": "webview",
       "level": "high",
       "status": "pending",
-      "note": "受限 webview 节点（HTML 预览 B1 备选①）高危；须先修订 L2 红线（G3）方可评审，未评审前不落地"
+      "note": "受限 webview 节点（HTML 预览 B1 备选①）高危；须先修订 L2 红线（G3）方可评审，未评审前不落地；编辑页已按方案 ③（源码预览 + 导出 HTML + 系统打开）落地，不依赖本项"
     }
   ],
-  "permissions_note": "E1.1（2026-10-08）按盘点报告 §4 清单重列：permissions 只放已落地项（network + ui.clipboard.write + fs.pick）；permission_risks 逐项标风险级别与落地状态，level 口径同宿主 BrickPermission.level（low / mid / high；app-level = 应用级用途声明、不过安装期未知值闸门）；status：declared = 已写入 permissions，resolved = 核查后判定无需声明，pending = 名称或能力未落地（禁止写入 permissions，未知 agent.* / ui.* 会被安装期闸门拒装）。非权限项（令牌语义色 / SF Symbols 白名单 / 逻辑进程私有目录）见 Shadeling 仓 specs/phase-e-wechat-mp-盘点-2026-10-08.md §4 与 specs/phase-e-前置核查-T1-T5-B1-2026-10-08.md。",
-  "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/wechat-mp/releases/1.1.1/wechat-mp-1.1.1.zip",
-  "sha256": "4a41a9efa760c65108722441540e33919a2d5c06fa36223eccb49cd3d4ee7061",
-  "release_notes": "Phase 2：迁移到 BrickUIKit 积木规范化模板（窗口 980×680 / 最小 760×520，破坏性确认改 brickConfirm）。E1.1：按 Phase E 盘点报告 §4 重列权限段（新增 ui.clipboard.write / fs.pick 声明，并附 permission_risks 风险台账），Info.plist 与 manifest 版本对齐 1.1.1。"
+  "permissions_note": "E1（2026-10-09）切 brick-app/v2 后口径：permissions 只放已落地且已登记枚举的项（network 应用级提示标记 + ui.clipboard.write + fs.pick）；permission_risks 逐项标风险级别与落地状态，level 口径同宿主 BrickPermission.level（low / mid / high；app-level = 应用级用途声明、不过安装期未知值闸门）；status：declared = 已写入 permissions，resolved = 核查后判定无需声明，pending = 名称或能力未落地（禁止写入 permissions，未知 agent.* / ui.* 会被安装期闸门拒装）。本版不引入任何新权限：agent.web.write 虽已评审立项，但底座实现未落地，仍留在 pending。非权限项（令牌语义色 / SF Symbols 白名单 / 逻辑进程私有目录）见 Shadeling 仓 specs/phase-e-wechat-mp-盘点-2026-10-08.md §4 与 specs/phase-e-前置核查-T1-T5-B1-2026-10-08.md。",
+  "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/wechat-mp/releases/1.2.0/wechat-mp-1.2.0.zip",
+  "release_notes": "E1 收口：升级为 brick-app/v2 声明式积木（nav / ui / logic 三段 + quota），逻辑进程 logic/wechat_mp（jsonrpc-stdio/1，python3）落地——Markdown→HTML 管线、账号凭据私有目录持有、草稿 / 素材 / 发布全链路，出网统一经受控入口并逐次留痕（host / method / path / 响应码，凭据取值不入日志），未授予 agent.web.write 时按 upload_blocked 横幅与发布入口四态探测明确降级。源码侧 Phase 2/1 已完成（BrickUIKit 依赖 + BrickScene 窗口契约 + brickConfirm 破坏性确认）；v2 不再发布 .app bundle，源码按 vault 先例保留。自测 118 项全通过。",
+  "sha256": "5af82cc5061c14598b9736a49353c6240a4a762cd0a719ef3e5e307e1b6717f5"
 }
