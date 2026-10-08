@@ -1,17 +1,43 @@
 {
-  "schema": "brick-app/v1",
-  "id": "com.shadeling.brick.vault",
+  "schema": "brick-app/v2",
+  "brick_id": "com.shadeling.brick.vault",
   "name": "vault",
   "title": "本地资产中枢",
-  "version": "1.1.0",
-  "author": "Shadeling",
+  "version": "1.2.0",
   "summary": "本地资产中枢：证件/图片/网页/笔记/技能快照的本地归档、检索与证件 OCR 识别。",
+  "author": "Shadeling",
   "kind": "product",
-  "bundle": "Vault.app",
-  "icon": "icon.png",
-  "min_os": "14.0",
-  "permissions": [],
-  "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/vault/releases/1.1.0/vault-1.1.0.zip",
-  "sha256": "f25497c9cbd8dde80499ba1f7bf93c39e3f849d8767b62f6552f739a409046cf",
-  "release_notes": "迁移到 BrickUIKit 积木规范化模板（Phase 1 试点）：窗口契约 / 弹层 / 设计令牌统一走包内契约。"
+  "nav": {
+    "view_id": "vault",
+    "title": "本地资产中枢",
+    "icon": "lock.shield",
+    "order": 100
+  },
+  "ui": {
+    "engine": "shadeling-ui/1",
+    "entry": "ui/main.json",
+    "theme": "brick-light"
+  },
+  "logic": {
+    "protocol": "jsonrpc-stdio/1",
+    "entry": "logic/vault",
+    "runtime": "python3",
+    "args": [],
+    "env": {},
+    "sha256": "b85cf19b79e97bc270fe994a9c5b1b8a528ad2d365d27cc469969a162352cdc8"
+  },
+  "permissions": [
+    "fs.pick",
+    "auth.biometric",
+    "ocr.recognize"
+  ],
+  "quota": {
+    "ui_events_per_sec": 30,
+    "max_nodes": 2000,
+    "storage_mb": 256,
+    "rss_mb": 512
+  },
+  "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/vault/releases/1.2.0/vault-1.2.0.zip",
+  "sha256": "1f7e8d9d724aa38d6909fd7b5c1b1e2084a7e1b9a40fb5016c5d3f9d9e41ae14",
+  "release_notes": "升级为声明式积木（brick-app/v2）：ui/main.json 首帧文档 + logic/vault 逻辑进程（runtime=python3），权限收敛为 fs.pick / auth.biometric / ocr.recognize。"
 }

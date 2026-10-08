@@ -47,22 +47,36 @@
   "root": {
     "type": "container",
     "id": "root",
-    "props": { "direction": "vertical", "gap": 14, "padding": 16 },
+    "props": {
+      "direction": "vertical",
+      "gap": 14,
+      "padding": 16
+    },
     "children": [
       {
         "type": "container",
         "id": "cmd_bar",
-        "props": { "direction": "horizontal", "gap": 12, "align": "center" },
+        "props": {
+          "direction": "horizontal",
+          "gap": 12,
+          "align": "center"
+        },
         "children": [
           {
             "type": "text",
             "id": "app_title",
-            "props": { "value": "Vault", "style": "title" }
+            "props": {
+              "value": "Vault",
+              "style": "title"
+            }
           },
           {
             "type": "text",
             "id": "app_subtitle",
-            "props": { "value": "{{state.subtitle}}", "style": "caption" }
+            "props": {
+              "value": "{{state.subtitle}}",
+              "style": "caption"
+            }
           },
           {
             "type": "form",
@@ -78,58 +92,157 @@
                 }
               ]
             },
-            "on": { "change": "q_change", "submit": "search" }
+            "on": {
+              "change": "q_change",
+              "submit": "search"
+            }
           },
           {
             "type": "button",
             "id": "btn_add",
-            "props": { "label": "手动新增", "style": "primary" },
-            "on": { "tap": "open_manual" }
+            "props": {
+              "label": "手动新增",
+              "style": "primary"
+            },
+            "on": {
+              "tap": "open_manual"
+            }
           },
           {
             "type": "button",
             "id": "btn_ocr",
-            "props": { "label": "OCR 录入" },
-            "on": { "tap": "open_ocr" }
+            "props": {
+              "label": "OCR 录入"
+            },
+            "on": {
+              "tap": "open_ocr"
+            }
           },
           {
             "type": "button",
             "id": "btn_refresh",
-            "props": { "label": "刷新" },
-            "on": { "tap": "refresh" }
+            "props": {
+              "label": "刷新"
+            },
+            "on": {
+              "tap": "refresh"
+            }
           }
         ]
       },
       {
         "type": "container",
         "id": "filter_bar",
-        "props": { "direction": "horizontal", "gap": 8 },
+        "props": {
+          "direction": "horizontal",
+          "gap": 8
+        },
         "children": [
-          { "type": "button", "id": "filt_all", "props": { "label": "全部", "style": "primary" }, "on": { "tap": "set_filter" } },
-          { "type": "button", "id": "filt_document", "props": { "label": "证件", "style": "ghost" }, "on": { "tap": "set_filter" } },
-          { "type": "button", "id": "filt_image", "props": { "label": "图片", "style": "ghost" }, "on": { "tap": "set_filter" } },
-          { "type": "button", "id": "filt_webpage", "props": { "label": "收藏", "style": "ghost" }, "on": { "tap": "set_filter" } },
-          { "type": "button", "id": "filt_skill_snapshot", "props": { "label": "技能", "style": "ghost" }, "on": { "tap": "set_filter" } },
-          { "type": "button", "id": "filt_note", "props": { "label": "笔记", "style": "ghost" }, "on": { "tap": "set_filter" } },
-          { "type": "button", "id": "filt_ai", "props": { "label": "AI 沉淀", "style": "ghost" }, "on": { "tap": "set_filter" } }
+          {
+            "type": "button",
+            "id": "filt_all",
+            "props": {
+              "label": "全部",
+              "style": "primary"
+            },
+            "on": {
+              "tap": "set_filter"
+            }
+          },
+          {
+            "type": "button",
+            "id": "filt_document",
+            "props": {
+              "label": "证件",
+              "style": "ghost"
+            },
+            "on": {
+              "tap": "set_filter"
+            }
+          },
+          {
+            "type": "button",
+            "id": "filt_image",
+            "props": {
+              "label": "图片",
+              "style": "ghost"
+            },
+            "on": {
+              "tap": "set_filter"
+            }
+          },
+          {
+            "type": "button",
+            "id": "filt_webpage",
+            "props": {
+              "label": "收藏",
+              "style": "ghost"
+            },
+            "on": {
+              "tap": "set_filter"
+            }
+          },
+          {
+            "type": "button",
+            "id": "filt_skill_snapshot",
+            "props": {
+              "label": "技能",
+              "style": "ghost"
+            },
+            "on": {
+              "tap": "set_filter"
+            }
+          },
+          {
+            "type": "button",
+            "id": "filt_note",
+            "props": {
+              "label": "笔记",
+              "style": "ghost"
+            },
+            "on": {
+              "tap": "set_filter"
+            }
+          },
+          {
+            "type": "button",
+            "id": "filt_ai",
+            "props": {
+              "label": "AI 沉淀",
+              "style": "ghost"
+            },
+            "on": {
+              "tap": "set_filter"
+            }
+          }
         ]
       },
       {
         "type": "grid",
         "id": "card_wall",
-        "props": { "columns": 3, "min_column_width": 190, "gap": 14 },
+        "props": {
+          "columns": 3,
+          "min_column_width": 190,
+          "gap": 14
+        },
         "children": []
       },
       {
         "type": "text",
         "id": "empty_hint",
-        "props": { "value": "暂无资产 · 可用「手动新增」或「OCR 录入」添加", "style": "caption" },
+        "props": {
+          "value": "暂无资产 · 可用「手动新增」或「OCR 录入」添加",
+          "style": "caption"
+        },
         "if": "state.empty_hint_present"
       },
       {
         "type": "text",
         "id": "list_hint",
-        "props": { "value": "{{state.list_hint}}", "style": "caption" },
+        "props": {
+          "value": "{{state.list_hint}}",
+          "style": "caption"
+        },
         "if": "state.truncated"
       },
       {
@@ -140,7 +253,8 @@
           "level": "info",
           "visible": "{{state.banner_is_info}}",
           "text": "{{state.banner}}"
-        }
+        },
+        "subtype": "banner"
       },
       {
         "type": "overlay",
@@ -150,12 +264,16 @@
           "level": "warning",
           "visible": "{{state.banner_is_warn}}",
           "text": "{{state.banner}}"
-        }
+        },
+        "subtype": "banner"
       },
       {
         "type": "text",
         "id": "last_action",
-        "props": { "value": "{{state.last_action_line}}", "style": "caption" }
+        "props": {
+          "value": "{{state.last_action_line}}",
+          "style": "caption"
+        }
       },
       {
         "type": "overlay",
@@ -167,7 +285,10 @@
           "content": {
             "type": "container",
             "id": "manual_panel",
-            "props": { "direction": "vertical", "gap": 10 },
+            "props": {
+              "direction": "vertical",
+              "gap": 10
+            },
             "children": [
               {
                 "type": "form",
@@ -182,48 +303,79 @@
                       "label": "录入类型",
                       "value": "{{state.manual_kind_label}}",
                       "options": [
-                        "证件 · 身份证", "证件 · 驾照", "证件 · 护照", "证件 · 资格证", "证件 · 其他证件",
-                        "账号", "收藏", "笔记"
+                        "证件 · 身份证",
+                        "证件 · 驾照",
+                        "证件 · 护照",
+                        "证件 · 资格证",
+                        "证件 · 其他证件",
+                        "账号",
+                        "收藏",
+                        "笔记"
                       ]
                     }
                   ]
                 },
-                "on": { "change": "manual_kind_change" }
+                "on": {
+                  "change": "manual_kind_change"
+                }
               },
               {
                 "type": "form",
                 "id": "manual_form",
-                "props": { "submit_label": "存入 Vault", "fields": [] },
-                "on": { "change": "manual_change", "submit": "manual_submit" }
+                "props": {
+                  "submit_label": "存入 Vault",
+                  "fields": []
+                },
+                "on": {
+                  "change": "manual_change",
+                  "submit": "manual_submit"
+                }
               },
               {
                 "type": "text",
                 "id": "manual_error_text",
-                "props": { "value": "{{state.manual_error}}", "style": "caption", "lines": 2 },
+                "props": {
+                  "value": "{{state.manual_error}}",
+                  "style": "caption",
+                  "lines": 2
+                },
                 "if": "state.manual_error_present"
               },
               {
                 "type": "container",
                 "id": "manual_actions",
-                "props": { "direction": "horizontal", "gap": 8 },
+                "props": {
+                  "direction": "horizontal",
+                  "gap": 8
+                },
                 "children": [
                   {
                     "type": "button",
                     "id": "btn_save_asset",
-                    "props": { "label": "存入 Vault", "style": "primary" },
-                    "on": { "tap": "manual_submit_button" }
+                    "props": {
+                      "label": "存入 Vault",
+                      "style": "primary"
+                    },
+                    "on": {
+                      "tap": "manual_submit_button"
+                    }
                   },
                   {
                     "type": "button",
                     "id": "btn_close_manual",
-                    "props": { "label": "取消" },
-                    "on": { "tap": "close_manual" }
+                    "props": {
+                      "label": "取消"
+                    },
+                    "on": {
+                      "tap": "close_manual"
+                    }
                   }
                 ]
               }
             ]
           }
-        }
+        },
+        "subtype": "sheet"
       },
       {
         "type": "overlay",
@@ -235,54 +387,99 @@
           "content": {
             "type": "container",
             "id": "ocr_panel",
-            "props": { "direction": "vertical", "gap": 10 },
+            "props": {
+              "direction": "vertical",
+              "gap": 10
+            },
             "children": [
               {
                 "type": "text",
                 "id": "ocr_stage_text",
-                "props": { "value": "阶段：{{state.ocr_stage_label}}", "style": "caption" }
+                "props": {
+                  "value": "阶段：{{state.ocr_stage_label}}",
+                  "style": "caption"
+                }
               },
               {
                 "type": "text",
                 "id": "ocr_picked_text",
-                "props": { "value": "{{state.ocr_picked_line}}", "style": "caption", "lines": 2 },
+                "props": {
+                  "value": "{{state.ocr_picked_line}}",
+                  "style": "caption",
+                  "lines": 2
+                },
                 "if": "state.ocr_has_picked"
               },
               {
                 "type": "text",
                 "id": "ocr_text_view",
-                "props": { "value": "{{state.ocr_text_masked}}", "style": "body", "lines": 8 },
+                "props": {
+                  "value": "{{state.ocr_text_masked}}",
+                  "style": "body",
+                  "lines": 8
+                },
                 "if": "state.ocr_has_text"
               },
               {
                 "type": "text",
                 "id": "ocr_text_note",
-                "props": { "value": "识别原文中的长数字已脱敏展示，明文仅加密留存于本机", "style": "caption", "lines": 2 },
+                "props": {
+                  "value": "识别原文中的长数字已脱敏展示，明文仅加密留存于本机",
+                  "style": "caption",
+                  "lines": 2
+                },
                 "if": "state.ocr_has_text"
               },
               {
                 "type": "container",
                 "id": "ocr_parsed_box",
-                "props": { "direction": "vertical", "gap": 6, "card_style": "card" },
+                "props": {
+                  "direction": "vertical",
+                  "gap": 6,
+                  "card_style": "card"
+                },
                 "if": "state.ocr_has_parsed",
                 "children": [
                   {
                     "type": "text",
                     "id": "ocr_parsed_title",
-                    "props": { "value": "识别到的字段", "style": "heading" }
+                    "props": {
+                      "value": "识别到的字段",
+                      "style": "heading"
+                    }
                   },
                   {
                     "type": "list",
                     "id": "ocr_parsed_list",
-                    "props": { "items": "{{state.ocr_rows}}", "empty_state": "暂无可解析字段" },
+                    "props": {
+                      "items": "{{state.ocr_rows}}",
+                      "empty_state": "暂无可解析字段"
+                    },
                     "children": [
                       {
                         "type": "container",
                         "id": "ocr_row",
-                        "props": { "direction": "horizontal", "gap": 6 },
+                        "props": {
+                          "direction": "horizontal",
+                          "gap": 6
+                        },
                         "children": [
-                          { "type": "text", "id": "ocr_row_label", "props": { "value": "{{state.item.label}}", "style": "caption" } },
-                          { "type": "text", "id": "ocr_row_value", "props": { "value": "{{state.item.value}}", "style": "caption" } }
+                          {
+                            "type": "text",
+                            "id": "ocr_row_label",
+                            "props": {
+                              "value": "{{state.item.label}}",
+                              "style": "caption"
+                            }
+                          },
+                          {
+                            "type": "text",
+                            "id": "ocr_row_value",
+                            "props": {
+                              "value": "{{state.item.value}}",
+                              "style": "caption"
+                            }
+                          }
                         ]
                       }
                     ]
@@ -292,37 +489,58 @@
               {
                 "type": "text",
                 "id": "ocr_error_text",
-                "props": { "value": "{{state.ocr_error}}", "style": "caption", "lines": 2 },
+                "props": {
+                  "value": "{{state.ocr_error}}",
+                  "style": "caption",
+                  "lines": 2
+                },
                 "if": "state.ocr_has_error"
               },
               {
                 "type": "container",
                 "id": "ocr_actions",
-                "props": { "direction": "horizontal", "gap": 8 },
+                "props": {
+                  "direction": "horizontal",
+                  "gap": 8
+                },
                 "children": [
                   {
                     "type": "button",
                     "id": "btn_ocr_pick",
-                    "props": { "label": "选择图片 / PDF", "style": "primary" },
-                    "on": { "tap": "ocr_pick" }
+                    "props": {
+                      "label": "选择图片 / PDF",
+                      "style": "primary"
+                    },
+                    "on": {
+                      "tap": "ocr_pick"
+                    }
                   },
                   {
                     "type": "button",
                     "id": "btn_ocr_save",
-                    "props": { "label": "存入 Vault" },
-                    "on": { "tap": "ocr_save" }
+                    "props": {
+                      "label": "存入 Vault"
+                    },
+                    "on": {
+                      "tap": "ocr_save"
+                    }
                   },
                   {
                     "type": "button",
                     "id": "btn_close_ocr",
-                    "props": { "label": "关闭" },
-                    "on": { "tap": "close_ocr" }
+                    "props": {
+                      "label": "关闭"
+                    },
+                    "on": {
+                      "tap": "close_ocr"
+                    }
                   }
                 ]
               }
             ]
           }
-        }
+        },
+        "subtype": "sheet"
       },
       {
         "type": "overlay",
@@ -334,37 +552,79 @@
           "content": {
             "type": "container",
             "id": "detail_panel",
-            "props": { "direction": "vertical", "gap": 10 },
+            "props": {
+              "direction": "vertical",
+              "gap": 10
+            },
             "children": [
               {
                 "type": "text",
                 "id": "detail_title_text",
-                "props": { "value": "{{state.detail_title}}", "style": "heading" }
+                "props": {
+                  "value": "{{state.detail_title}}",
+                  "style": "heading"
+                }
               },
               {
                 "type": "text",
                 "id": "detail_meta_text",
-                "props": { "value": "{{state.detail_meta}}", "style": "caption", "lines": 2 }
+                "props": {
+                  "value": "{{state.detail_meta}}",
+                  "style": "caption",
+                  "lines": 2
+                }
               },
               {
                 "type": "container",
                 "id": "detail_basic_box",
-                "props": { "direction": "vertical", "gap": 6, "card_style": "card" },
+                "props": {
+                  "direction": "vertical",
+                  "gap": 6,
+                  "card_style": "card"
+                },
                 "if": "state.detail_has_rows",
                 "children": [
-                  { "type": "text", "id": "detail_basic_title", "props": { "value": "基本信息", "style": "heading" } },
+                  {
+                    "type": "text",
+                    "id": "detail_basic_title",
+                    "props": {
+                      "value": "基本信息",
+                      "style": "heading"
+                    }
+                  },
                   {
                     "type": "list",
                     "id": "detail_rows_list",
-                    "props": { "items": "{{state.detail_rows}}", "empty_state": "暂无字段" },
+                    "props": {
+                      "items": "{{state.detail_rows}}",
+                      "empty_state": "暂无字段"
+                    },
                     "children": [
                       {
                         "type": "container",
                         "id": "detail_row",
-                        "props": { "direction": "horizontal", "gap": 6 },
+                        "props": {
+                          "direction": "horizontal",
+                          "gap": 6
+                        },
                         "children": [
-                          { "type": "text", "id": "detail_row_label", "props": { "value": "{{state.item.label}}", "style": "caption" } },
-                          { "type": "text", "id": "detail_row_value", "props": { "value": "{{state.item.value}}", "style": "caption", "lines": 2 } }
+                          {
+                            "type": "text",
+                            "id": "detail_row_label",
+                            "props": {
+                              "value": "{{state.item.label}}",
+                              "style": "caption"
+                            }
+                          },
+                          {
+                            "type": "text",
+                            "id": "detail_row_value",
+                            "props": {
+                              "value": "{{state.item.value}}",
+                              "style": "caption",
+                              "lines": 2
+                            }
+                          }
                         ]
                       }
                     ]
@@ -374,40 +634,69 @@
               {
                 "type": "container",
                 "id": "detail_locked_box",
-                "props": { "direction": "vertical", "gap": 6, "card_style": "card" },
+                "props": {
+                  "direction": "vertical",
+                  "gap": 6,
+                  "card_style": "card"
+                },
                 "if": "state.detail_has_sensitive",
                 "children": [
                   {
                     "type": "text",
                     "id": "detail_locked_hint",
-                    "props": { "value": "敏感字段已加密（验证后展示）", "style": "caption" }
+                    "props": {
+                      "value": "敏感字段已加密（验证后展示）",
+                      "style": "caption"
+                    }
                   },
                   {
                     "type": "list",
                     "id": "detail_sensitive_list",
-                    "props": { "items": "{{state.detail_sensitive_rows}}" },
+                    "props": {
+                      "items": "{{state.detail_sensitive_rows}}"
+                    },
                     "if": "state.detail_unlocked",
                     "children": [
-                      { "type": "text", "id": "detail_sensitive_row", "props": { "value": "{{state.item.text}}", "style": "caption", "lines": 2 } }
+                      {
+                        "type": "text",
+                        "id": "detail_sensitive_row",
+                        "props": {
+                          "value": "{{state.item.text}}",
+                          "style": "caption",
+                          "lines": 2
+                        }
+                      }
                     ]
                   },
                   {
                     "type": "text",
                     "id": "detail_unlocking_text",
-                    "props": { "value": "正在验证…", "style": "caption" },
+                    "props": {
+                      "value": "正在验证…",
+                      "style": "caption"
+                    },
                     "if": "state.detail_unlocking"
                   },
                   {
                     "type": "button",
                     "id": "btn_unlock",
-                    "props": { "label": "Touch ID / 密码验证后查看", "style": "primary" },
+                    "props": {
+                      "label": "Touch ID / 密码验证后查看",
+                      "style": "primary"
+                    },
                     "if": "state.detail_can_unlock",
-                    "on": { "tap": "unlock" }
+                    "on": {
+                      "tap": "unlock"
+                    }
                   },
                   {
                     "type": "text",
                     "id": "detail_auth_error_text",
-                    "props": { "value": "{{state.detail_auth_error}}", "style": "caption", "lines": 2 },
+                    "props": {
+                      "value": "{{state.detail_auth_error}}",
+                      "style": "caption",
+                      "lines": 2
+                    },
                     "if": "state.detail_has_auth_error"
                   }
                 ]
@@ -415,19 +704,37 @@
               {
                 "type": "container",
                 "id": "detail_ai_box",
-                "props": { "direction": "vertical", "gap": 6, "card_style": "card" },
+                "props": {
+                  "direction": "vertical",
+                  "gap": 6,
+                  "card_style": "card"
+                },
                 "if": "state.detail_has_ai",
                 "children": [
-                  { "type": "text", "id": "detail_ai_title", "props": { "value": "AI 摘要", "style": "heading" } },
+                  {
+                    "type": "text",
+                    "id": "detail_ai_title",
+                    "props": {
+                      "value": "AI 摘要",
+                      "style": "heading"
+                    }
+                  },
                   {
                     "type": "text",
                     "id": "detail_ai_summary_text",
-                    "props": { "value": "{{state.detail_ai_summary}}", "style": "body", "lines": 6 }
+                    "props": {
+                      "value": "{{state.detail_ai_summary}}",
+                      "style": "body",
+                      "lines": 6
+                    }
                   },
                   {
                     "type": "text",
                     "id": "detail_ai_tags_text",
-                    "props": { "value": "{{state.detail_ai_tags_line}}", "style": "caption" },
+                    "props": {
+                      "value": "{{state.detail_ai_tags_line}}",
+                      "style": "caption"
+                    },
                     "if": "state.detail_has_ai_tags"
                   }
                 ]
@@ -435,15 +742,37 @@
               {
                 "type": "container",
                 "id": "detail_actions",
-                "props": { "direction": "horizontal", "gap": 8 },
+                "props": {
+                  "direction": "horizontal",
+                  "gap": 8
+                },
                 "children": [
-                  { "type": "button", "id": "btn_delete", "props": { "label": "删除" }, "on": { "tap": "ask_delete" } },
-                  { "type": "button", "id": "btn_close_detail", "props": { "label": "关闭" }, "on": { "tap": "close_detail" } }
+                  {
+                    "type": "button",
+                    "id": "btn_delete",
+                    "props": {
+                      "label": "删除"
+                    },
+                    "on": {
+                      "tap": "ask_delete"
+                    }
+                  },
+                  {
+                    "type": "button",
+                    "id": "btn_close_detail",
+                    "props": {
+                      "label": "关闭"
+                    },
+                    "on": {
+                      "tap": "close_detail"
+                    }
+                  }
                 ]
               }
             ]
           }
-        }
+        },
+        "subtype": "sheet"
       },
       {
         "type": "overlay",
@@ -457,7 +786,11 @@
           "danger": true,
           "visible": "{{state.confirm_delete}}"
         },
-        "on": { "confirm": "confirm_delete", "cancel": "cancel_delete" }
+        "on": {
+          "confirm": "confirm_delete",
+          "cancel": "cancel_delete"
+        },
+        "subtype": "dialog"
       }
     ]
   }
