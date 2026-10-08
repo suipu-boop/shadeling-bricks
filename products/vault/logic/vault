@@ -1013,6 +1013,34 @@ def _require_permission(state, perm, action_label):
     return False
 
 
+def _cap_data(result):
+    """解包底座能力回执：业务返回值在 ``data`` 层（D3 能力 I/O 契约 §5.3.6）。
+
+    兼容两种形状：底座回执 ``{"allowed": true, "data": {...}}``，以及直给业务对象的
+    最小形状（离线自测 / 早期 mock）。非 dict 一律视为空。
+    """
+    if isinstance(result, dict):
+        data = result.get("data")
+        if isinstance(data, dict):
+            return data
+        return result
+    return {}
+
+
+def _cap_granted(result):
+    """生物识别裁决：``granted`` 为权威键，兼容 ``success``；缺省 False（安全默认）。
+
+    注意缺省必须是 False —— 早期实现缺省 True，会把宿主真实回执的失败
+    （``{"success": false}``）误判为通过而解锁敏感字段。
+    """
+    data = _cap_data(result)
+    if "granted" in data:
+        return bool(data.get("granted"))
+    if "success" in data:
+        return bool(data.get("success"))
+    return False
+
+
 def _error_text(error, fallback):
     if not error:
         return fallback
@@ -1222,10 +1250,12 @@ def _on_capability_result(call_id, result, error):
             state["detail_auth_error"] = message
             _banner(state, message, "warn")
             APP.log("warn", "auth.biometric 失败：%s" % message)
-        elif not (result or {}).get("granted", True):
-            message = "验证未通过：未获得生物识别授权"
+        elif not _cap_granted(result):
+            message = (_cap_data(result).get("error")
+                       or "验证未通过：未获得生物识别授权")
             state["detail_auth_error"] = message
             _banner(state, message, "warn")
+            APP.log("warn", "auth.biometric 未通过：%s" % message)
         else:
             plain = STORE.plain_fields(context)
             if plain:
@@ -1244,12 +1274,18 @@ def _on_capability_result(call_id, result, error):
             _banner(state, state["ocr_error"], "warn")
             state["ocr_stage"] = "idle"
         else:
-            picked = ""
-            if isinstance(result, dict):
-                picked = result.get("path") or ""
-                if not picked:
-                    paths = result.get("paths") or []
-                    picked = paths[0] if paths else ""
+            data = _cap_data(result)
+            if data.get("cancelled"):
+                state["ocr_error"] = ""
+                state["ocr_stage"] = "idle"
+                state["last_action"] = "已取消选择文件"
+                APP.log("info", "fs.pick 用户取消，回到空闲")
+                APP.push()
+                return
+            picked = data.get("path") or ""
+            if not picked:
+                paths = data.get("paths") or []
+                picked = paths[0] if paths else ""
             if not picked:
                 state["ocr_error"] = "未选择任何文件"
                 _banner(state, state["ocr_error"], "warn")
@@ -1269,11 +1305,10 @@ def _on_capability_result(call_id, result, error):
             _banner(state, state["ocr_error"], "warn")
             state["ocr_stage"] = "picked"
         else:
-            text = ""
-            if isinstance(result, dict):
-                text = result.get("text") or ""
-            elif isinstance(result, str):
+            if isinstance(result, str):
                 text = result
+            else:
+                text = _cap_data(result).get("text") or ""
             text = (text or "").strip()
             if not text:
                 state["ocr_error"] = "OCR 未识别到文本，可换个更清晰的文件重试"

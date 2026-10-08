@@ -712,6 +712,40 @@ def scenario_p2():
 
 
 # ---------------------------------------------------------------------------
+# D3：底座真实能力回执形状（§5.3 能力 I/O 契约）
+# ---------------------------------------------------------------------------
+
+def cap_payload(capability, data, *, level="中", forward="host", allowed=True,
+                audit_persisted=True, audit_seq=101, notice=""):
+    """按底座真实回执形状构造 capability/call 应答。
+
+    业务返回值统一在 ``data`` 层；调用方（逻辑进程）必须解包 data 后再取业务键。
+    """
+    payload = {
+        "allowed": allowed,
+        "result": None,
+        "capability": capability,
+        "level": level,
+        "forward": forward,
+        "data": data,
+        "audit_persisted": audit_persisted,
+        "audit_seq": audit_seq,
+    }
+    if notice:
+        payload["notice"] = notice
+    return payload
+
+
+def cap_reply(peer, call, capability, data, **kw):
+    """按真实回执形状应答一次能力调用（D3 起自测不再用裸业务对象）。"""
+    if not call:
+        return False
+    peer.send({"jsonrpc": "2.0", "id": call["id"],
+               "result": cap_payload(capability, data, **kw)})
+    return True
+
+
+# ---------------------------------------------------------------------------
 # 场景 P3：授权放行 · 解锁 + OCR 全链路
 # ---------------------------------------------------------------------------
 
@@ -748,8 +782,8 @@ def scenario_p3():
         peer.dispatch("btn_unlock", "tap")
         call = peer.wait_request("capability/call", timeout=6.0)
         if call:
-            peer.send({"jsonrpc": "2.0", "id": call["id"], "result": {"granted": True,
-                                                                     "biometry": "touch_id"}})
+            cap_reply(peer, call, "auth.biometric",
+                      {"granted": True, "biometry": "touch_id"})
         # 异步链：解锁完成帧晚于 btn_unlock 触发的首帧，按条件等待而不是只取一帧
         frame = peer.wait_snapshot(lambda s: s.get("detail_unlocking") is False, timeout=8.0)
         # 明文渲染可能落在紧随其后的帧上：再探一帧含明文的渲染帧
@@ -789,15 +823,15 @@ def scenario_p3():
             bool(pick) and (pick.get("params") or {}).get("method") == "fs.pick",
             "call=%r" % (pick and pick.get("params"),))
         if pick:
-            peer.send({"jsonrpc": "2.0", "id": pick["id"],
-                       "result": {"path": image_path, "kind": "image"}})
+            cap_reply(peer, pick, "fs.pick", {"cancelled": False, "paths": [image_path]})
         ocr_call = peer.wait_request("capability/call", timeout=6.0)
         CHK("P3.4", "选到文件后自动串联 ocr.recognize",
             bool(ocr_call) and (ocr_call.get("params") or {}).get("method") == "ocr.recognize"
             and ((ocr_call.get("params") or {}).get("params") or {}).get("path") == image_path,
             "call=%r" % (ocr_call and ocr_call.get("params"),))
         if ocr_call:
-            peer.send({"jsonrpc": "2.0", "id": ocr_call["id"], "result": {"text": OCR_TEXT}})
+            cap_reply(peer, ocr_call, "ocr.recognize",
+                      {"text": OCR_TEXT, "chars": len(OCR_TEXT)})
         # 异步链：OCR 识别→解析完成帧晚于识别中帧，按终态等待
         frame = peer.wait_snapshot(lambda s: s.get("ocr_stage") not in (None, "recognizing"),
                                    timeout=8.0)
@@ -833,6 +867,142 @@ def scenario_p3():
         CHK("P3.9", "OCR 条目敏感号码加密存储",
             payload and "130102199001011234" not in payload[0] and "number_masked" in payload[0],
             "payload=%s" % (payload[0][:160] if payload else ""))
+        peer.shutdown()
+        peer.wait_exit()
+        return peer
+    finally:
+        if peer.proc.poll() is None:
+            peer.kill()
+        peer.close()
+
+
+# ---------------------------------------------------------------------------
+# 场景 P9：D3 真实底座回执形状（data 层解包 / 缺省安全）
+# ---------------------------------------------------------------------------
+
+def scenario_p9():
+    print("\n== 场景 P9：D3 真实底座回执形状（data 层解包 / 缺省安全） ==")
+    peer = Peer("p9", granted=ALL_PERMS, declared=ALL_PERMS)
+    try:
+        peer.initialize()
+        peer.initialized()
+        # 造一条带敏感字段的证件
+        peer.drain()
+        peer.dispatch("btn_add", "tap")
+        peer.wait_update()
+        peer.drain()
+        peer.dispatch("manual_kind_form", "change", {"value": "身份证"})
+        peer.wait_update()
+        peer.drain()
+        peer.dispatch("manual_form", "change",
+                      {"field_id": "number_full", "value": "130102199001011234"})
+        peer.wait_update()
+        peer.drain()
+        peer.dispatch("btn_save_asset", "tap")
+        frame = peer.wait_update()
+        snap = (frame or {}).get("params", {}).get("state_snapshot", {})
+        asset_id = (snap.get("items") or [{}])[0].get("id")
+        peer.drain()
+        peer.dispatch("card_%s" % asset_id, "tap")
+        peer.wait_update()
+
+        # P9.1 真实回执 data.granted=false → 保持锁定并给出原因
+        peer.drain()
+        peer.dispatch("btn_unlock", "tap")
+        call = peer.wait_request("capability/call", timeout=6.0)
+        cap_reply(peer, call, "auth.biometric",
+                  {"granted": False, "error": "用户取消了 Touch ID 校验"})
+        frame = peer.wait_snapshot(lambda s: s.get("detail_unlocking") is False, timeout=8.0)
+        snap = (frame or {}).get("params", {}).get("state_snapshot", {})
+        CHK("P9.1", "生物识别未通过（data.granted=false）→ 保持锁定且给出原因",
+            snap.get("detail_unlocked") is not True
+            and not (snap.get("detail_sensitive") or {})
+            and bool(snap.get("detail_auth_error")),
+            "unlocked=%r sensitive=%r err=%r" % (
+                snap.get("detail_unlocked"), snap.get("detail_sensitive"),
+                snap.get("detail_auth_error")))
+
+        # P9.2 兼容键：宿主旧形状 data.success=false → 同样不解锁
+        peer.drain()
+        peer.dispatch("btn_unlock", "tap")
+        call = peer.wait_request("capability/call", timeout=6.0)
+        cap_reply(peer, call, "auth.biometric", {"success": False})
+        frame = peer.wait_snapshot(lambda s: s.get("detail_unlocking") is False, timeout=8.0)
+        snap = (frame or {}).get("params", {}).get("state_snapshot", {})
+        CHK("P9.2", "宿主旧形状 success=false → 同样不解锁（缺省 False）",
+            snap.get("detail_unlocked") is not True
+            and not (snap.get("detail_sensitive") or {}),
+            "unlocked=%r err=%r" % (snap.get("detail_unlocked"),
+                                    snap.get("detail_auth_error")))
+
+        # P9.3 回执无 granted/success 键 → 缺省 False，不解锁
+        peer.drain()
+        peer.dispatch("btn_unlock", "tap")
+        call = peer.wait_request("capability/call", timeout=6.0)
+        cap_reply(peer, call, "auth.biometric", {})
+        frame = peer.wait_snapshot(lambda s: s.get("detail_unlocking") is False, timeout=8.0)
+        snap = (frame or {}).get("params", {}).get("state_snapshot", {})
+        CHK("P9.3", "回执缺 granted/success 键 → 缺省 False，不解锁",
+            snap.get("detail_unlocked") is not True,
+            "unlocked=%r" % snap.get("detail_unlocked"))
+
+        # P9.4 真实回执 granted=true → 解锁并出明文
+        peer.drain()
+        peer.dispatch("btn_unlock", "tap")
+        call = peer.wait_request("capability/call", timeout=6.0)
+        cap_reply(peer, call, "auth.biometric", {"granted": True, "biometry": "touch_id"})
+        frame = peer.wait_snapshot(lambda s: s.get("detail_unlocked") is True, timeout=8.0)
+        snap = (frame or {}).get("params", {}).get("state_snapshot", {})
+        CHK("P9.4", "生物识别通过（真实回执）→ 解锁并出明文",
+            snap.get("detail_unlocked") is True
+            and (snap.get("detail_sensitive") or {}).get("number_full") == "130102199001011234",
+            "unlocked=%r sensitive=%r" % (snap.get("detail_unlocked"),
+                                          snap.get("detail_sensitive")))
+
+        # P9.5 fs.pick 取消（cancelled=true）→ 静默回空闲、不报错
+        peer.drain()
+        peer.dispatch("btn_close_detail", "tap")
+        peer.wait_update()
+        peer.drain()
+        peer.dispatch("btn_ocr", "tap")
+        peer.wait_update()
+        peer.drain()
+        peer.dispatch("btn_ocr_pick", "tap")
+        pick = peer.wait_request("capability/call", timeout=6.0)
+        cap_reply(peer, pick, "fs.pick", {"cancelled": True, "paths": []})
+        frame = peer.wait_snapshot(lambda s: s.get("ocr_stage") == "idle", timeout=8.0)
+        snap = (frame or {}).get("params", {}).get("state_snapshot", {})
+        CHK("P9.5", "文件选择被取消 → 回到空闲且不写错误",
+            snap.get("ocr_stage") == "idle" and not (snap.get("ocr_error") or ""),
+            "stage=%r err=%r" % (snap.get("ocr_stage"), snap.get("ocr_error")))
+
+        # P9.6 fs.pick 真实回执只带 paths 数组 → 取首项并自动串联 ocr.recognize
+        image_path = os.path.join(WORK, "receipt-p9.png")
+        with open(image_path, "wb") as handle:
+            handle.write(b"\x89PNG\r\n\x1a\n")
+        peer.drain()
+        peer.dispatch("btn_ocr_pick", "tap")
+        pick = peer.wait_request("capability/call", timeout=6.0)
+        cap_reply(peer, pick, "fs.pick", {"cancelled": False, "paths": [image_path]})
+        ocr_call = peer.wait_request("capability/call", timeout=6.0)
+        CHK("P9.6", "fs.pick 回 paths 数组 → 取首项并自动串联 ocr.recognize",
+            bool(ocr_call)
+            and ((ocr_call.get("params") or {}).get("params") or {}).get("path") == image_path,
+            "call=%r" % (ocr_call and ocr_call.get("params"),))
+
+        # P9.7 ocr.recognize 真实回执 data.text → 解析为就绪态
+        cap_reply(peer, ocr_call, "ocr.recognize",
+                  {"text": OCR_TEXT, "chars": len(OCR_TEXT)})
+        frame = peer.wait_snapshot(
+            lambda s: s.get("ocr_stage") not in (None, "recognizing"), timeout=8.0)
+        snap = (frame or {}).get("params", {}).get("state_snapshot", {})
+        CHK("P9.7", "OCR 真实回执 data.text → 解析为就绪态",
+            snap.get("ocr_stage") == "ready"
+            and bool((snap.get("ocr_parsed") or {}).get("doc_type")),
+            "stage=%r parsed=%r err=%r" % (snap.get("ocr_stage"),
+                                           snap.get("ocr_parsed"),
+                                           snap.get("ocr_error")))
+
         peer.shutdown()
         peer.wait_exit()
         return peer
@@ -1064,6 +1234,7 @@ def main():
     scenario_p1()
     scenario_p2()
     scenario_p3()
+    scenario_p9()
     scenario_negative()
     scenario_ui_fallback()
     scenario_persistence()
