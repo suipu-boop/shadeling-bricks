@@ -1,0 +1,1521 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""vault 逻辑进程 —— 声明式积木 ``com.shadeling.brick.vault``（契约 §7.5 Phase D1）。
+
+职责：把 vault 的业务状态机从原生界面实现（``source/Sources/Vault/``）抽离到
+``jsonrpc-stdio/1`` 逻辑进程；UI 树由本进程按 state 产出（D2 落 ``ui/*.json`` 后改为
+「UI 文档声明在包内、逻辑进程只推 state」，届时 render 会优先复用包内 root）。
+
+覆盖的业务动作（与 Swift 侧逐项对齐）：
+  - 命令栏：关键词检索（search change/submit）、手动新增入口、刷新；
+  - 筛选栏：全部 / 证件 / 图片 / 收藏 / 技能 / 笔记 / AI 沉淀（source == "ai"）；
+  - 卡片墙：自适应栅格（min_column_width 190 / max 260 / gap 14）+ 卡片副标题与 AI/锁角标；
+  - 详情：字段卡片、编号掩码、敏感字段「Touch ID / 密码验证后查看」解锁、AI 摘要、删除两步确认；
+  - 手动新增：按录入模板动态表单（证件 / 账号 / 收藏 / 笔记），敏感字段加密入库；
+  - OCR 录入：``fs.pick`` 选图 → ``ocr.recognize`` 识别 → 解析证件字段 → 落库（敏感字段加密）。
+
+对齐来源（只读参考，本次未改动）：
+  - 契约：``specs/Shadeling积木声明式UI架构设计与契约-v0.1.md``（§2.5 组件 / §4.4 方法总表 / §4.7 430x / §7.5 验收）
+  - SDK：``sdk/python/brick_sdk.py``（帧编解码 + BrickApp，本文件不内置副本）
+  - 数据层蓝本：``runtime/vault_store.py``（SQLite + openssl AES-256-CBC + 钥匙串密钥）
+  - 功能来源：``products/vault/source/Sources/Vault/``（ContentView / DetailSheet / ManualAddSheet / VaultModels / VaultOCR / VaultStore）
+
+约束落实：
+  - 仅标准库：json / os / re / shutil / sqlite3 / subprocess / sys / time / uuid（无三方依赖）；
+  - 无原生壳与视图层符号：本文件不引用任何 App 壳、窗口、独立进程壳符号（§7.5 验收 4）；
+  - 栅格自适应：卡片墙只声明 min/max 列宽，列数由 viewport 宽度算出并下发（state.grid_columns，§7.5 验收 5）；
+  - 权限不静默失败：能力调用前先按 ``granted_permissions`` 自查，未授予即 banner + 日志提示（§7.5 验收 2），
+    并在底座回 4309 时给出同样的明确文案。
+
+环境变量：
+  - ``SHADELING_HOME``：库位置（``<home>/vault/vault.db``）；缺省回退
+    ``~/Library/Application Support/Shadeling/vault``（存在时）→ ``~/.shadeling/vault``；
+  - ``SHADELING_BRICK_SDK_DIR``：SDK 所在目录（开发期在仓库外 spawn 时必须显式指定）；
+  - ``SHADELING_VAULT_KEY``：显式注入加密密钥（自测 / CI 用，避免污染系统钥匙串）；
+  - ``SHADELING_VAULT_ALLOW_FETCH=1``：允许网页资产抓取（默认关闭：本地优先，逻辑进程不做网络阻塞）。
+
+运行（开发期）::
+
+    SHADELING_BRICK_SDK_DIR=<repo>/sdk/python python3 products/vault/logic/vault
+"""
+
+import json
+import os
+import re
+import shutil
+import sqlite3
+import subprocess
+import sys
+import time
+import uuid
+
+sys.dont_write_bytecode = True  # 不向 SDK 目录/包内写 .pyc，保持仓库干净
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+PACKAGE_ROOT = os.path.dirname(HERE)
+
+
+def _locate_sdk_dir():
+    """返回含 brick_sdk.py 的目录；找不到返回 None（不内置 SDK 副本，避免包体漂移）。"""
+    candidates = []
+    env_dir = os.environ.get("SHADELING_BRICK_SDK_DIR")
+    if env_dir:
+        candidates.append(env_dir)
+    candidates.append(HERE)
+
+    current = HERE
+    for _ in range(8):
+        parent = os.path.dirname(current)
+        if not parent or parent == current:
+            break
+        candidates.append(os.path.join(parent, "sdk", "python"))
+        current = parent
+
+    for candidate in candidates:
+        if os.path.isfile(os.path.join(candidate, "brick_sdk.py")):
+            return candidate
+    return None
+
+
+_SDK_DIR = _locate_sdk_dir()
+if _SDK_DIR is None:
+    sys.stderr.write(
+        "[vault] 未找到 brick_sdk.py；请设置 SHADELING_BRICK_SDK_DIR，"
+        "或把 brick_sdk.py 放到本文件同目录，或在仓库内运行\n"
+    )
+    raise SystemExit(1)
+sys.path.insert(0, _SDK_DIR)
+
+import brick_sdk  # noqa: E402  （必须在 sys.path 注入之后导入）
+
+# ---------------------------------------------------------------------------
+# 常量
+# ---------------------------------------------------------------------------
+
+BRICK_ID = "com.shadeling.brick.vault"
+KEYCHAIN_SERVICE = "shadeling-vault"
+KEYCHAIN_ACCOUNT = "vault-key"
+
+ASSET_TYPES = ["document", "image", "webpage", "skill_snapshot", "note"]
+TYPE_LABELS = {
+    "document": "证件", "image": "图片", "webpage": "收藏",
+    "skill_snapshot": "技能", "note": "笔记",
+}
+DOCUMENT_TYPE_OPTIONS = ["身份证", "驾照", "护照", "资格证", "其他证件"]
+
+FILTERS = [
+    ("all", "全部"), ("document", "证件"), ("image", "图片"), ("webpage", "收藏"),
+    ("skill_snapshot", "技能"), ("note", "笔记"), ("ai", "AI 沉淀"),
+]
+FILTER_LABELS = dict(FILTERS)
+
+CARD_PREFIX = "card_"
+LIST_LIMIT = 200          # 单帧卡片上限（quota.max_nodes=2000 的护栏）
+GRID_MIN_W = 190          # 与 Swift LazyVGrid(.adaptive(minimum: 190, maximum: 260)) 对齐
+GRID_MAX_W = 260
+GRID_GAP = 14
+GRID_PADDING = 16
+GRID_MAX_COLUMNS = 6
+MIN_VIEWPORT_WIDTH = 640  # §7.5 验收 5：主区域 640pt 最小宽度下可用
+
+# 敏感字段展示名（与 Swift DetailSheet.label(for:) 对齐）
+SENSITIVE_LABELS = {"number_full": "证件号码", "password": "口令", "ocr_text": "识别原文"}
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS assets (
+    id          TEXT PRIMARY KEY,
+    type        TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    created_at  REAL NOT NULL,
+    updated_at  REAL NOT NULL,
+    payload     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
+"""
+
+
+# ---------------------------------------------------------------------------
+# 数据层：与 runtime/vault_store.py、Swift VaultStore 同库同构（表 / 加密 / 路径三对齐）
+# ---------------------------------------------------------------------------
+
+def resolve_vault_dir():
+    """库位置推导（与 Swift ``VaultPaths.vaultDir`` 一致）。"""
+    home_env = os.environ.get("SHADELING_HOME")
+    if home_env:
+        return os.path.join(home_env, "vault")
+    app_support = os.path.join(os.path.expanduser("~/Library/Application Support"),
+                               "Shadeling", "vault")
+    if os.path.isdir(app_support):
+        return app_support
+    return os.path.join(os.path.expanduser("~"), ".shadeling", "vault")
+
+
+def _openssl_bin():
+    return shutil.which("openssl") or "/usr/bin/openssl"
+
+
+def _security_bin():
+    return "/usr/bin/security" if os.path.exists("/usr/bin/security") else (shutil.which("security") or "")
+
+
+def _run(args, stdin_text=None):
+    try:
+        return subprocess.run(args, input=stdin_text, capture_output=True, text=True)
+    except OSError as exc:
+        sys.stderr.write("[vault] 子进程执行失败 %s：%s\n" % (args[0], exc))
+        return None
+
+
+def keychain_get():
+    sec = _security_bin()
+    if not sec:
+        return ""
+    proc = _run([sec, "find-generic-password", "-s", KEYCHAIN_SERVICE,
+                 "-a", KEYCHAIN_ACCOUNT, "-w"])
+    if proc is None or proc.returncode != 0:
+        return ""
+    return (proc.stdout or "").strip()
+
+
+def keychain_set(key):
+    sec = _security_bin()
+    if not sec:
+        return False
+    proc = _run([sec, "add-generic-password", "-s", KEYCHAIN_SERVICE,
+                 "-a", KEYCHAIN_ACCOUNT, "-w", key, "-U"])
+    return bool(proc is not None and proc.returncode == 0)
+
+
+def gen_key():
+    proc = _run([_openssl_bin(), "rand", "-hex", "32"])
+    key = (proc.stdout or "").strip() if proc is not None else ""
+    if len(key) != 64:
+        raise RuntimeError("openssl rand -hex 32 生成密钥失败")
+    return key
+
+
+def load_key(vault_dir):
+    """密钥：显式注入 → 钥匙串 → keyfile（0600）→ 生成并落钥匙串 + keyfile。"""
+    injected = (os.environ.get("SHADELING_VAULT_KEY") or "").strip()
+    if injected:
+        return injected
+    from_keychain = keychain_get()
+    if from_keychain:
+        return from_keychain
+    keyfile = os.path.join(vault_dir, ".vault_key")
+    if os.path.isfile(keyfile):
+        try:
+            with open(keyfile, "r", encoding="utf-8") as handle:
+                existing = handle.read().strip()
+            if existing:
+                return existing
+        except OSError:
+            pass
+    key = gen_key()
+    keychain_set(key)
+    try:
+        os.makedirs(vault_dir, exist_ok=True)
+        with open(keyfile, "w", encoding="utf-8") as handle:
+            handle.write(key)
+        os.chmod(keyfile, 0o600)
+    except OSError:
+        pass
+    return key
+
+
+def encrypt_text(plain, key):
+    """与蓝本逐参一致：openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:<key> -base64。"""
+    proc = _run([_openssl_bin(), "enc", "-aes-256-cbc", "-salt", "-pbkdf2",
+                 "-pass", "pass:%s" % key, "-base64"], stdin_text=plain)
+    if proc is None or proc.returncode != 0:
+        raise RuntimeError("加密失败（openssl）：%s" % (proc.stderr if proc else "无法启动"))
+    blob = (proc.stdout or "").strip()
+    if not blob:
+        raise RuntimeError("加密失败：openssl 无输出")
+    return blob
+
+
+def decrypt_text(blob, key):
+    proc = _run([_openssl_bin(), "enc", "-d", "-aes-256-cbc", "-pbkdf2",
+                 "-pass", "pass:%s" % key, "-base64"], stdin_text=blob)
+    if proc is None or proc.returncode != 0:
+        raise RuntimeError("解密失败（openssl）：%s" % (proc.stderr if proc else "无法启动"))
+    return proc.stdout or ""
+
+
+def mask_number(value):
+    """证件号脱敏：前 4 后 4 保留（与蓝本 _mask / Swift maskNumber 同规）。"""
+    text = str(value).strip()
+    if len(text) <= 8:
+        return text[:1] + "*" * max(0, len(text) - 1)
+    return text[:4] + "*" * (len(text) - 8) + text[-4:]
+
+
+def mask_sensitive_text(text):
+    """整段文本脱敏：把长度 ≥ 6 的连续数字（证件号 / 卡号等）按 mask_number 规则遮挡。
+
+    用于「识别原文」下发 UI 树与落库前的处理；原始文本仍以密文留存（见 save_ocr），
+    保证列表 / 卡片 / 弹层与 SQLite 内均不出现明文号码（§7.5 验收 2 的脱敏口径）。
+    """
+    return re.sub(r"\d{6,}", lambda match: mask_number(match.group(0)), str(text))
+
+
+def fmt_ts(ts):
+    try:
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(float(ts)))
+    except (TypeError, ValueError):
+        return ""
+
+
+def rel_time(ts):
+    try:
+        delta = time.time() - float(ts)
+    except (TypeError, ValueError):
+        return ""
+    if delta < 60:
+        return "刚刚"
+    if delta < 3600:
+        return "%d 分钟前" % int(delta // 60)
+    if delta < 86400:
+        return "%d 小时前" % int(delta // 3600)
+    if delta < 86400 * 30:
+        return "%d 天前" % int(delta // 86400)
+    return fmt_ts(ts)[:10]
+
+
+_IMPORT_STRIP = re.compile(r"(?is)<(script|style|head|nav|footer)[^>]*>.*?</\1>")
+_TAG_STRIP = re.compile(r"<[^>]+>")
+
+DOC_NUMBER_RE = re.compile(r"[0-9]{17}[0-9Xx]")
+DATE_RE = re.compile(r"(\d{4})[.\-/年](\d{1,2})[.\-/月](\d{1,2})")
+DOC_TYPE_RULES = [
+    (["居民身份证", "身份证"], "身份证"),
+    (["护照"], "护照"),
+    (["驾驶证", "驾照"], "驾驶证"),
+    (["往来港澳"], "往来港澳通行证"),
+    (["台湾居民来往大陆通行证", "台胞证"], "台湾居民来往大陆通行证"),
+    (["资格证", "执业证", "从业资格"], "资格证"),
+]
+
+
+def parse_document_fields(text):
+    """从 OCR/文本中尽力抽取证件字段（与 Swift VaultOCR.parseDocumentFields 同步）。"""
+    out = {}
+    for keys, value in DOC_TYPE_RULES:
+        if any(k in text for k in keys):
+            out["doc_type"] = value
+            break
+    dates = []
+    for match in DATE_RE.finditer(text):
+        try:
+            dates.append("%04d-%02d-%02d" % (int(match.group(1)), int(match.group(2)), int(match.group(3))))
+        except ValueError:
+            continue
+    if len(dates) >= 2:
+        out["valid_from"], out["valid_to"] = dates[0], dates[1]
+    elif len(dates) == 1:
+        out["valid_to"] = dates[0]
+    number = DOC_NUMBER_RE.search(text)
+    if number:
+        out["number_full"] = number.group(0)
+    return out
+
+
+class VaultStore:
+    """vault 数据层（逻辑进程内自持；与蓝本同库文件、同 schema、同加密口径）。"""
+
+    def __init__(self, root=None):
+        self.root = root or resolve_vault_dir()
+        os.makedirs(self.root, exist_ok=True)
+        self.db_path = os.path.join(self.root, "vault.db")
+        self._conn = sqlite3.connect(self.db_path)
+        self._conn.executescript(_SCHEMA)
+        self._conn.commit()
+        self._key = None
+
+    # ---- 密钥 / 加解密 ----
+    def key(self):
+        if self._key is None:
+            self._key = load_key(self.root)
+        return self._key
+
+    def encrypt(self, plain):
+        return encrypt_text(plain, self.key())
+
+    def decrypt(self, blob):
+        return decrypt_text(blob, self.key())
+
+    # ---- 行 → 字典（脱敏；与蓝本 _row_to_dict 字段口径一致）----
+    def _row_to_asset(self, row, include_sensitive=False):
+        aid, typ, title, created, updated, payload = row
+        try:
+            parsed = json.loads(payload)
+        except ValueError:
+            parsed = {}
+        fields = dict(parsed.get("fields") or {})
+        enc = dict(parsed.get("enc") or {})
+        top_source = parsed.get("source")
+        ai = parsed.get("ai") or {}
+        asset = {
+            "id": aid, "type": typ, "title": title,
+            "created_at": created, "updated_at": updated,
+            "file_ref": parsed.get("file_ref"),
+            "has_sensitive": bool(enc),
+            "ai_summary": ai.get("summary", ""),
+            "ai_tags": list(ai.get("ai_tags") or []),
+            "ai_key_points": list(ai.get("key_points") or []),
+        }
+        asset.update(fields)
+        if top_source:
+            asset["source"] = top_source
+        asset["is_ai"] = (top_source == "ai")
+        if include_sensitive and enc:
+            for name, blob in enc.items():
+                try:
+                    asset[name] = self.decrypt(blob)
+                except Exception:
+                    asset[name] = "***解密失败***"
+        return asset
+
+    _SELECT = "SELECT id,type,title,created_at,updated_at,payload FROM assets"
+
+    # ---- 查列表（卡片墙用；AI 口径在 Python 侧判定，避免 JSON 序列化差异）----
+    def list(self, type=None, q=None, ai_only=False, top_k=LIST_LIMIT + 1):
+        sql = self._SELECT
+        wheres, args = [], []
+        if type:
+            wheres.append("type=?")
+            args.append(type)
+        if q:
+            wheres.append("(title LIKE ? OR payload LIKE ?)")
+            args += ["%%%s%%" % q, "%%%s%%" % q]
+        if wheres:
+            sql += " WHERE " + " AND ".join(wheres)
+        sql += " ORDER BY updated_at DESC, id DESC LIMIT ?"
+        args.append(top_k)
+        rows = self._conn.execute(sql, args).fetchall()
+        assets = [self._row_to_asset(row) for row in rows]
+        if ai_only:
+            assets = [a for a in assets if a.get("is_ai")]
+        return assets
+
+    def get(self, aid, include_sensitive=False):
+        row = self._conn.execute(self._SELECT + " WHERE id=?", (aid,)).fetchone()
+        if not row:
+            return None
+        return self._row_to_asset(row, include_sensitive=include_sensitive)
+
+    def plain_fields(self, aid):
+        """详情解锁：返回该资产 enc 段全部明文（无 enc 返回空字典）。"""
+        row = self._conn.execute("SELECT payload FROM assets WHERE id=?", (aid,)).fetchone()
+        if not row:
+            return {}
+        try:
+            parsed = json.loads(row[0])
+        except ValueError:
+            return {}
+        enc = dict(parsed.get("enc") or {})
+        out = {}
+        for name, blob in enc.items():
+            try:
+                out[name] = self.decrypt(blob)
+            except Exception:
+                out[name] = "***解密失败***"
+        return out
+
+    # ---- 增 ----
+    def add(self, params):
+        typ = params.get("type")
+        if typ not in ASSET_TYPES:
+            raise ValueError("未知资产类型：%s" % typ)
+        fields = dict(params.get("fields") or {})
+        sensitive = dict(params.get("sensitive") or {})
+        source = params.get("source")
+        now = time.time()
+        aid = uuid.uuid4().hex[:12]
+        enc = {}
+
+        # 文件落盘（私有目录 vault/<id>/，与蓝本一致）
+        file_ref = None
+        src_path = params.get("file_path")
+        if src_path and os.path.isfile(src_path):
+            target_dir = os.path.join(self.root, aid)
+            os.makedirs(target_dir, exist_ok=True)
+            dest = os.path.join(target_dir, os.path.basename(src_path))
+            shutil.copyfile(src_path, dest)
+            file_ref = dest
+
+        # document.number_full 加密 + 脱敏
+        if typ == "document":
+            num = fields.pop("number_full", None) or sensitive.pop("number_full", None)
+            if num:
+                enc["number_full"] = self.encrypt(str(num))
+                fields["number_masked"] = mask_number(num)
+
+        for name, value in sensitive.items():
+            if value:
+                enc[name] = self.encrypt(str(value))
+
+        # 网页资产：默认不做网络抓取（本地优先）；仅显式开启时抓标题/摘要
+        if typ == "webpage" and not fields.get("excerpt") and fields.get("url"):
+            if os.environ.get("SHADELING_VAULT_ALLOW_FETCH") == "1":
+                fetched = self.fetch_webpage(fields["url"])
+                if "error" not in fetched:
+                    fields.setdefault("title", fetched["title"])
+                    fields["excerpt"] = fetched["excerpt"]
+                    fields.setdefault("source", fetched.get("source", ""))
+
+        title = (params.get("title") or "").strip() or default_title(typ, fields)
+        payload = {"fields": fields, "enc": enc, "file_ref": file_ref}
+        if source:
+            payload["source"] = source
+        self._conn.execute(
+            "INSERT INTO assets (id,type,title,created_at,updated_at,payload) VALUES (?,?,?,?,?,?)",
+            (aid, typ, title, now, now, json.dumps(payload, ensure_ascii=False)))
+        self._conn.commit()
+        return self._row_to_asset((aid, typ, title, now, now, json.dumps(payload, ensure_ascii=False)))
+
+    # ---- 改（OCR 文本等附加字段写回，不触碰 enc / file_ref / ai）----
+    def update_fields(self, aid, fields):
+        row = self._conn.execute("SELECT payload FROM assets WHERE id=?", (aid,)).fetchone()
+        if not row:
+            return False
+        try:
+            parsed = json.loads(row[0])
+        except ValueError:
+            return False
+        merged = dict(parsed.get("fields") or {})
+        merged.update(fields)
+        parsed["fields"] = merged
+        self._conn.execute("UPDATE assets SET payload=?, updated_at=? WHERE id=?",
+                           (json.dumps(parsed, ensure_ascii=False), time.time(), aid))
+        self._conn.commit()
+        return True
+
+    # ---- 删 ----
+    def delete(self, aid):
+        row = self._conn.execute("SELECT id FROM assets WHERE id=?", (aid,)).fetchone()
+        if not row:
+            return False
+        asset_dir = os.path.join(self.root, aid)
+        if os.path.isdir(asset_dir):
+            shutil.rmtree(asset_dir, ignore_errors=True)
+        self._conn.execute("DELETE FROM assets WHERE id=?", (aid,))
+        self._conn.commit()
+        return True
+
+    def count(self):
+        return int(self._conn.execute("SELECT COUNT(*) FROM assets").fetchone()[0])
+
+    # ---- 网页抓取（可选，默认不启用；与蓝本同口径）----
+    def fetch_webpage(self, url, timeout=12.0):
+        import urllib.error
+        import urllib.parse
+        import urllib.request
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 ShadelingVault"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read()
+                charset = resp.headers.get_content_charset() or "utf-8"
+            html = raw.decode(charset, errors="replace")
+        except (urllib.error.URLError, OSError, TimeoutError) as exc:
+            return {"error": "抓取失败：%s: %s" % (type(exc).__name__, exc)}
+        title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.S | re.I)
+        title = re.sub(r"\s+", " ", _TAG_STRIP.sub(" ", title_match.group(1))).strip() if title_match else url
+        body = _IMPORT_STRIP.sub(" ", html)
+        text = re.sub(r"\s+", " ", _TAG_STRIP.sub(" ", body)).strip()
+        try:
+            host = urllib.parse.urlparse(url).netloc
+        except ValueError:
+            host = ""
+        return {"title": title[:120], "excerpt": text[:600], "source": host}
+
+
+def default_title(typ, fields):
+    if typ == "document":
+        return fields.get("doc_type") or "证件"
+    if typ == "webpage":
+        return fields.get("title") or fields.get("url") or "收藏"
+    if typ == "note":
+        text = fields.get("text") or ""
+        if text:
+            return text[:24]
+        return fields.get("account_name") or "笔记"
+    if typ == "image":
+        return "图片"
+    return "资产"
+
+
+# ---------------------------------------------------------------------------
+# 录入模板（与 Swift ManualTemplate / ManualKind 对齐）
+# ---------------------------------------------------------------------------
+
+MANUAL_KINDS = (
+    ["document:%s" % t for t in DOCUMENT_TYPE_OPTIONS] + ["account", "webpage", "note"]
+)
+
+
+def manual_specs(kind):
+    """按录入类型返回字段定义（id / label / sensitive / placeholder）。"""
+    if kind.startswith("document:"):
+        doc_type = kind.split(":", 1)[1]
+        return [
+            {"id": "doc_type", "label": "证件类型", "value": doc_type},
+            {"id": "issuer", "label": "签发方", "placeholder": "如 XX 市公安局 / XX 公司"},
+            {"id": "number_full", "label": "证件号码", "sensitive": True, "placeholder": "号码加密存储"},
+            {"id": "valid_from", "label": "生效日期", "placeholder": "YYYY-MM-DD"},
+            {"id": "valid_to", "label": "到期日期", "placeholder": "YYYY-MM-DD"},
+            {"id": "description", "label": "备注", "placeholder": "可选"},
+        ]
+    if kind == "account":
+        return [
+            {"id": "account_name", "label": "账户名", "placeholder": "账号 / 用户名"},
+            {"id": "password", "label": "口令", "sensitive": True, "placeholder": "加密存储"},
+            {"id": "url", "label": "网址", "placeholder": "登录地址，可选"},
+            {"id": "description", "label": "备注", "placeholder": "可选"},
+        ]
+    if kind == "webpage":
+        return [
+            {"id": "url", "label": "网址", "placeholder": "https://…"},
+            {"id": "description", "label": "备注", "placeholder": "可选"},
+        ]
+    return [{"id": "text", "label": "内容"}]
+
+
+def manual_kind_type(kind):
+    if kind.startswith("document:"):
+        return "document"
+    if kind == "account":
+        return "note"       # 与 Swift ManualKind.account.type 对齐
+    if kind == "webpage":
+        return "webpage"
+    return "note"
+
+
+def manual_kind_label(kind):
+    if kind.startswith("document:"):
+        return "证件 · %s" % kind.split(":", 1)[1]
+    return {"account": "账号", "webpage": "收藏", "note": "笔记"}.get(kind, kind)
+
+
+# ---------------------------------------------------------------------------
+# 状态与渲染
+# ---------------------------------------------------------------------------
+
+GRID_MIN = GRID_MIN_W
+PADDING = GRID_PADDING
+GRID_GAP_LOCAL = GRID_GAP
+
+INITIAL_STATE = {
+    "q": "",
+    "filter": "all",
+    "filter_label": "全部",
+    "items": [],
+    "total": 0,
+    "truncated": False,
+    "viewport_width": MIN_VIEWPORT_WIDTH,
+    "grid_columns": 3,
+    "banner": "",
+    "banner_level": "info",
+    "last_action": "就绪",
+    "manual_open": False,
+    "manual_kind": "document:身份证",
+    "manual_draft": {},
+    "manual_error": "",
+    "detail_open": False,
+    "detail_id": "",
+    "detail_title": "",
+    "detail_meta": "",
+    "detail_rows": [],
+    "detail_has_sensitive": False,
+    "detail_unlocked": False,
+    "detail_sensitive": {},
+    "detail_unlocking": False,
+    "detail_auth_error": "",
+    "detail_ai_summary": "",
+    "detail_ai_tags": [],
+    "confirm_delete": False,
+    "ocr_open": False,
+    "ocr_stage": "idle",
+    "ocr_picked": "",
+    "ocr_text": "",
+    "ocr_parsed": {},
+    "ocr_error": "",
+}
+
+
+def grid_columns_for(width):
+    """由 viewport 宽度算自适应列数（min 1，max 6；640pt 最小宽度下 ≥ 2）。"""
+    try:
+        width = float(width)
+    except (TypeError, ValueError):
+        width = MIN_VIEWPORT_WIDTH
+    if width < GRID_MIN_W:
+        width = MIN_VIEWPORT_WIDTH
+    usable = width - 2 * PADDING
+    count = int((usable + GRID_GAP_LOCAL) // (GRID_MIN_W + GRID_GAP_LOCAL))
+    return max(1, min(GRID_MAX_COLUMNS, count))
+
+
+def card_of(asset):
+    return {
+        "id": asset["id"],
+        "type": asset["type"],
+        "title": asset["title"],
+        "type_label": TYPE_LABELS.get(asset["type"], asset["type"]),
+        "subtitle": subtitle_of(asset),
+        "is_ai": bool(asset.get("is_ai")),
+        "has_sensitive": bool(asset.get("has_sensitive")),
+        "updated_rel": rel_time(asset.get("updated_at")),
+    }
+
+
+def subtitle_of(asset):
+    """卡片副标题（与 Swift VaultAsset.subtitle 同规）。"""
+    typ = asset.get("type")
+    if typ == "document":
+        parts = [asset.get("doc_type"), ("至 %s" % asset["valid_to"]) if asset.get("valid_to") else ""]
+    elif typ == "webpage":
+        parts = [asset.get("source"), asset.get("url")]
+    elif typ == "skill_snapshot":
+        parts = [asset.get("category"), asset.get("version")]
+    elif typ == "image":
+        parts = [("相册 · %s" % asset["album"]) if asset.get("album") else ""]
+    elif typ == "note":
+        text = asset.get("text") or ""
+        parts = [text[:60]]
+    else:
+        parts = []
+    return " · ".join([str(p) for p in parts if p])
+
+
+def detail_rows_of(asset):
+    """详情「基本信息」行（与 Swift DetailSheet.fields 同规）。"""
+    typ = asset.get("type")
+    rows = []
+    if typ == "document":
+        rows += [("证件类型", asset.get("doc_type") or ""), ("签发方", asset.get("issuer") or ""),
+                 ("生效日期", asset.get("valid_from") or ""), ("到期日期", asset.get("valid_to") or ""),
+                 ("编号(掩码)", asset.get("number_masked") or "")]
+    elif typ == "webpage":
+        if asset.get("url"):
+            rows.append(("网址", asset["url"]))
+        if asset.get("source") and not asset.get("is_ai"):
+            rows.append(("来源", asset["source"]))
+        if asset.get("excerpt"):
+            rows.append(("摘要", asset["excerpt"]))
+    elif typ == "skill_snapshot":
+        rows += [("类别", asset.get("category") or ""), ("版本", asset.get("version") or ""),
+                 ("说明", asset.get("skill_desc") or "")]
+    elif typ == "note":
+        if asset.get("account_name"):
+            rows.append(("账户", asset["account_name"]))
+        if asset.get("url"):
+            rows.append(("网址", asset["url"]))
+        if asset.get("text"):
+            rows.append(("内容", asset["text"]))
+    if asset.get("description"):
+        rows.append(("备注", asset["description"]))
+    tags = asset.get("tags") or []
+    if tags:
+        rows.append(("标签", "、".join(tags)))
+    return [{"label": k, "value": v} for k, v in rows if v]
+
+
+def _text(node_id, value, style=None, lines=None):
+    props = {"value": value}
+    if style:
+        props["style"] = style
+    if lines:
+        props["lines"] = lines
+    return {"type": "text", "id": node_id, "props": props}
+
+
+def _button(node_id, label, action, style=None):
+    node = {"type": "button", "id": node_id, "props": {"label": label}, "on": {"tap": action}}
+    if style:
+        node["props"]["style"] = style
+    return node
+
+
+def build_root(state):
+    """按 state 产出 UI 文档 root（纯函数：不做 IO，卡片数据来自 state["items"]）。"""
+    children = []
+
+    # ---- 命令栏 ----
+    search_form = {
+        "type": "form", "id": "search_box",
+        "props": {
+            "submit_label": "查找",
+            "fields": [{"id": "q", "placeholder": "查找资产 / 网址 / 内容", "value": state.get("q", "")}],
+        },
+        "on": {"change": "q_change", "submit": "search"},
+    }
+    children.append({
+        "type": "container", "id": "cmd_bar",
+        "props": {"direction": "horizontal", "gap": 12, "align": "center"},
+        "children": [
+            _text("app_title", "Vault", style="title"),
+            _text("app_subtitle", "本地资产中枢 · %d 条" % int(state.get("total") or 0), style="caption"),
+            search_form,
+            _button("btn_add", "手动新增", "open_manual", style="primary"),
+            _button("btn_ocr", "OCR 录入", "open_ocr"),
+            _button("btn_refresh", "刷新", "refresh"),
+        ],
+    })
+
+    # ---- 筛选栏 ----
+    chips = []
+    for key, label in FILTERS:
+        chips.append(_button("filt_%s" % key, label, "set_filter",
+                             style="primary" if state.get("filter") == key else "ghost"))
+    children.append({
+        "type": "container", "id": "filter_bar",
+        "props": {"direction": "horizontal", "gap": 8},
+        "children": chips,
+    })
+
+    # ---- 卡片墙（自适应栅格；列数见 state.grid_columns）----
+    cards = []
+    for item in state.get("items") or []:
+        badge = "AI" if item.get("is_ai") else ""
+        cards.append({
+            "type": "card", "id": "%s%s" % (CARD_PREFIX, item["id"]),
+            "props": {
+                "title": item.get("title", ""),
+                "subtitle": item.get("subtitle", ""),
+                "caption": item.get("type_label", ""),
+                "badge": badge,
+                "locked": bool(item.get("has_sensitive")),
+                "footnote": item.get("updated_rel", ""),
+            },
+            "on": {"tap": "open_detail"},
+        })
+    if not cards:
+        cards.append(_text("empty_hint", "暂无资产 · 可用「手动新增」或「OCR 录入」添加", style="caption"))
+    children.append({
+        "type": "grid", "id": "card_wall",
+        "props": {"min_column_width": GRID_MIN_W, "max_column_width": GRID_MAX_W,
+                  "gap": GRID_GAP_LOCAL, "columns": int(state.get("grid_columns") or 1)},
+        "children": cards,
+    })
+    if state.get("truncated"):
+        children.append(_text("list_hint", "仅显示最近 %d 条，请用检索/筛选缩小范围" % LIST_LIMIT,
+                              style="caption"))
+
+    # ---- 手动新增弹层 ----
+    if state.get("manual_open"):
+        kind = state.get("manual_kind") or "document:身份证"
+        draft = state.get("manual_draft") or {}
+        fields = []
+        for spec in manual_specs(kind):
+            fields.append({
+                "id": spec["id"],
+                "label": spec["label"] + ("（加密存储）" if spec.get("sensitive") else ""),
+                "placeholder": spec.get("placeholder", ""),
+                "value": draft.get(spec["id"], spec.get("value", "")),
+                "sensitive": bool(spec.get("sensitive")),
+            })
+        kind_chips = [
+            {"type": "button", "id": "kind_%s" % k, "props": {
+                "label": manual_kind_label(k),
+                "style": "primary" if k == kind else "ghost"},
+             "on": {"tap": "set_manual_kind"}}
+            for k in MANUAL_KINDS
+        ]
+        sheet_children = [
+            _text("manual_title", "手动新增", style="heading"),
+            {"type": "container", "id": "manual_kinds",
+             "props": {"direction": "horizontal", "gap": 6}, "children": kind_chips},
+            {"type": "form", "id": "manual_form",
+             "props": {"submit_label": "存入 Vault", "fields": fields},
+             "on": {"change": "manual_change", "submit": "manual_submit"}},
+        ]
+        if state.get("manual_error"):
+            sheet_children.append(_text("manual_error", state["manual_error"], style="caption"))
+        sheet_children.append({
+            "type": "container", "id": "manual_actions",
+            "props": {"direction": "horizontal", "gap": 8},
+            "children": [_button("btn_save_asset", "存入 Vault", "manual_submit", style="primary"),
+                         _button("btn_close_manual", "取消", "close_manual")],
+        })
+        children.append({"type": "overlay", "id": "manual_sheet",
+                         "props": {"kind": "sheet", "title": "手动新增", "height": 560},
+                         "children": sheet_children})
+
+    # ---- OCR 录入弹层 ----
+    if state.get("ocr_open"):
+        ocr_children = [
+            _text("ocr_title", "OCR 录入", style="heading"),
+            _text("ocr_stage", "阶段：%s" % (state.get("ocr_stage") or "idle"), style="caption"),
+        ]
+        if state.get("ocr_picked"):
+            ocr_children.append(_text("ocr_picked", "已选文件：%s" % state["ocr_picked"], style="caption", lines=2))
+        if state.get("ocr_text"):
+            ocr_children.append(_text("ocr_text", mask_sensitive_text(state["ocr_text"]),
+                                      style="body", lines=8))
+            ocr_children.append(_text("ocr_text_note", "识别原文中的长数字已脱敏展示，明文仅加密留存于本机",
+                                      style="caption"))
+        parsed = state.get("ocr_parsed") or {}
+        if parsed:
+            rows = []
+            for key, value in parsed.items():
+                label = SENSITIVE_LABELS.get(key, key)
+                if key == "number_full":
+                    value = mask_number(value)
+                rows.append({"label": label, "value": value})
+            ocr_children.append({"type": "card", "id": "ocr_parsed",
+                                 "props": {"title": "识别到的字段"}, "children": [
+                                     _text("ocr_parsed_%s" % item["label"], "%s：%s" % (item["label"], item["value"]),
+                                           style="caption")
+                                     for item in rows]})
+        if state.get("ocr_error"):
+            ocr_children.append(_text("ocr_error", state["ocr_error"], style="caption"))
+        ocr_children.append({
+            "type": "container", "id": "ocr_actions",
+            "props": {"direction": "horizontal", "gap": 8},
+            "children": [_button("btn_ocr_pick", "选择图片 / PDF", "ocr_pick", style="primary"),
+                         _button("btn_ocr_save", "存入 Vault", "ocr_save"),
+                         _button("btn_close_ocr", "关闭", "close_ocr")],
+        })
+        children.append({"type": "overlay", "id": "ocr_sheet",
+                         "props": {"kind": "sheet", "title": "OCR 录入", "height": 520},
+                         "children": ocr_children})
+
+    # ---- 详情弹层 ----
+    if state.get("detail_open"):
+        detail_children = [
+            _text("detail_title", state.get("detail_title", ""), style="heading"),
+            _text("detail_meta", state.get("detail_meta", ""), style="caption"),
+        ]
+        if state.get("detail_rows"):
+            detail_children.append({"type": "card", "id": "detail_basic",
+                                    "props": {"title": "基本信息"}, "children": [
+                                        _text("detail_row_%d" % index, "%s：%s" % (row["label"], row["value"]),
+                                              style="caption")
+                                        for index, row in enumerate(state["detail_rows"])]})
+        if state.get("detail_has_sensitive"):
+            locked_children = [_text("detail_locked_hint", "敏感字段已加密（验证后展示）", style="caption")]
+            sensitive = state.get("detail_sensitive") or {}
+            if state.get("detail_unlocked") and sensitive:
+                for name, value in sensitive.items():
+                    locked_children.append(_text("detail_sensitive_%s" % name,
+                                                 "%s：%s" % (SENSITIVE_LABELS.get(name, name), value),
+                                                 style="caption", lines=2))
+            elif state.get("detail_unlocking"):
+                locked_children.append(_text("detail_unlocking", "正在验证…", style="caption"))
+            else:
+                locked_children.append(_button("btn_unlock", "Touch ID / 密码验证后查看", "unlock",
+                                               style="primary"))
+            if state.get("detail_auth_error"):
+                locked_children.append(_text("detail_auth_error", state["detail_auth_error"], style="caption"))
+            detail_children.append({"type": "card", "id": "detail_locked",
+                                    "props": {"title": "敏感字段"}, "children": locked_children})
+        if state.get("detail_ai_summary"):
+            ai_children = [_text("detail_ai_summary", state["detail_ai_summary"], style="body", lines=6)]
+            if state.get("detail_ai_tags"):
+                ai_children.append(_text("detail_ai_tags",
+                                         "、".join("#%s" % t for t in state["detail_ai_tags"]),
+                                         style="caption"))
+            detail_children.append({"type": "card", "id": "detail_ai",
+                                    "props": {"title": "AI 摘要"}, "children": ai_children})
+        detail_children.append({
+            "type": "container", "id": "detail_actions",
+            "props": {"direction": "horizontal", "gap": 8},
+            "children": [_button("btn_delete", "删除", "ask_delete"),
+                         _button("btn_close_detail", "关闭", "close_detail")],
+        })
+        children.append({"type": "overlay", "id": "detail_sheet",
+                         "props": {"kind": "sheet", "title": "资产详情", "height": 620},
+                         "children": detail_children})
+        if state.get("confirm_delete"):
+            children.append({
+                "type": "overlay", "id": "confirm_delete",
+                "props": {"kind": "dialog", "title": "删除这条记录？",
+                          "text": "将从 Vault 移除该条目及其私有文件，操作不可撤销。"},
+                "children": [_button("btn_confirm_delete", "删除", "confirm_delete", style="primary"),
+                             _button("btn_cancel_delete", "取消", "cancel_delete")],
+            })
+
+    # ---- 提示条 / 末次动作 ----
+    if state.get("banner"):
+        children.append(_text("banner", state["banner"], style="caption"))
+    children.append(_text("last_action", "最近操作：%s" % (state.get("last_action") or "-"), style="caption"))
+
+    return {"type": "container", "id": "root",
+            "props": {"direction": "vertical", "gap": 14, "padding": PADDING},
+            "children": children}
+
+
+# ---------------------------------------------------------------------------
+# 业务状态机
+# ---------------------------------------------------------------------------
+
+STORE = VaultStore()
+CALL_JOBS = {}          # capability call_id -> (method, context)
+BANNER_LEVELS = ("info", "warn")
+
+
+def _banner(state, text, level="info"):
+    state["banner"] = text
+    state["banner_level"] = level if level in BANNER_LEVELS else "info"
+
+
+def reload_items(state):
+    """按「筛选 + 检索」重算卡片墙数据（AI 沉淀口径与 Swift filteredItems 一致）。"""
+    flt = state.get("filter") or "all"
+    query = (state.get("q") or "").strip()
+    asset_type = None if flt in ("all", "ai") else flt
+    assets = STORE.list(type=asset_type, q=query or None, ai_only=(flt == "ai"),
+                        top_k=LIST_LIMIT + 1)
+    state["truncated"] = len(assets) > LIST_LIMIT
+    assets = assets[:LIST_LIMIT]
+    state["items"] = [card_of(a) for a in assets]
+    state["total"] = len(state["items"])
+    state["filter_label"] = FILTER_LABELS.get(flt, flt)
+    return state
+
+
+def _permission_state(perm):
+    """返回 True（已授予）/ False（明确未授予）/ None（底座未提供权限信息，交由底座裁决）。"""
+    granted = list(APP.granted_permissions or [])
+    declared = list(APP.declared_permissions or [])
+    if perm in granted:
+        return True
+    if not granted and not declared:
+        return None
+    return False
+
+
+def _require_permission(state, perm, action_label):
+    """能力调用前的权限自查：未授予 → 明确提示（不静默失败，§7.5 验收 2）。"""
+    verdict = _permission_state(perm)
+    if verdict is True or verdict is None:
+        return True
+    message = ("未授予「%s」权限，%s不可用（错误码 %d）；请在系统设置中授权后重试"
+               % (perm, action_label, brick_sdk.ERR_CAPABILITY_DENIED))
+    _banner(state, message, "warn")
+    state["last_action"] = "权限不足：%s" % perm
+    APP.log("warn", message)
+    return False
+
+
+def _error_text(error, fallback):
+    if not error:
+        return fallback
+    code = error.get("code")
+    message = error.get("message") or fallback
+    if code == brick_sdk.ERR_CAPABILITY_DENIED:
+        return "未授予权限（%d）：%s；请在系统设置中授权后重试" % (code, message)
+    return "%s（错误码 %s）" % (message, code)
+
+
+def _payload_id(payload, state):
+    """兼容三种渲染器回传约定：{id} / {item_id} / {item:{id}} / {index}。"""
+    if not isinstance(payload, dict):
+        return ""
+    for key in ("id", "item_id", "asset_id"):
+        if payload.get(key):
+            return str(payload[key])
+    item = payload.get("item")
+    if isinstance(item, dict) and item.get("id"):
+        return str(item["id"])
+    index = payload.get("index")
+    items = state.get("items") or []
+    if isinstance(index, int) and 0 <= index < len(items):
+        return items[index]["id"]
+    return ""
+
+
+def open_detail(state, aid):
+    asset = STORE.get(aid, include_sensitive=False)
+    if not asset:
+        _banner(state, "未找到该资产：%s" % aid, "warn")
+        return state
+    channel = "AI 沉淀" if asset.get("is_ai") else "手动录入"
+    state.update({
+        "detail_open": True,
+        "detail_id": aid,
+        "detail_title": asset.get("title", ""),
+        "detail_meta": "%s · %s · 更新于 %s" % (TYPE_LABELS.get(asset.get("type"), asset.get("type")),
+                                                channel, fmt_ts(asset.get("updated_at"))),
+        "detail_rows": detail_rows_of(asset),
+        "detail_has_sensitive": bool(asset.get("has_sensitive")),
+        "detail_unlocked": False,
+        "detail_sensitive": {},
+        "detail_unlocking": False,
+        "detail_auth_error": "",
+        "detail_ai_summary": asset.get("ai_summary") or "",
+        "detail_ai_tags": asset.get("ai_tags") or [],
+        "confirm_delete": False,
+    })
+    state["last_action"] = "打开详情：%s" % asset.get("title", "")
+    APP.log("info", "open_detail id=%s has_sensitive=%s" % (aid, asset.get("has_sensitive")))
+    return state
+
+
+def open_manual(state, kind="document:身份证"):
+    state["manual_open"] = True
+    state["manual_kind"] = kind
+    state["manual_error"] = ""
+    state["manual_draft"] = {spec["id"]: spec.get("value", "") for spec in manual_specs(kind)}
+    state["last_action"] = "打开手动新增（%s）" % manual_kind_label(kind)
+    return state
+
+
+def save_manual(state, draft):
+    kind = state.get("manual_kind") or "document:身份证"
+    asset_type = manual_kind_type(kind)
+    fields, sensitive = {}, {}
+    for spec in manual_specs(kind):
+        value = str(draft.get(spec["id"], "") or "").strip()
+        if not value:
+            continue
+        if spec.get("sensitive"):
+            sensitive[spec["id"]] = value
+        else:
+            fields[spec["id"]] = value
+    if asset_type == "document" and not fields.get("doc_type"):
+        fields["doc_type"] = kind.split(":", 1)[1] if kind.startswith("document:") else "其他证件"
+    try:
+        asset = STORE.add({"type": asset_type, "fields": fields, "sensitive": sensitive})
+    except Exception as exc:  # 加密/落盘失败 → 明确回显，不静默吞掉
+        state["manual_error"] = "存入失败：%s" % exc
+        _banner(state, state["manual_error"], "warn")
+        APP.log("error", state["manual_error"])
+        return state
+    state["manual_open"] = False
+    state["manual_draft"] = {}
+    state["manual_error"] = ""
+    _banner(state, "已存入 Vault：%s" % asset["title"], "info")
+    state["last_action"] = "手动新增：%s" % asset["title"]
+    APP.log("info", "manual saved id=%s type=%s" % (asset["id"], asset["type"]))
+    return reload_items(state)
+
+
+def save_ocr(state):
+    text = (state.get("ocr_text") or "").strip()
+    if not text:
+        state["ocr_error"] = "尚未识别到文本，请先选择文件并识别"
+        _banner(state, state["ocr_error"], "warn")
+        return state
+    parsed = dict(state.get("ocr_parsed") or {})
+    number = parsed.get("number_full")
+    masked = mask_sensitive_text(text)
+    if parsed.get("doc_type"):
+        fields = {"excerpt": masked, "doc_type": parsed["doc_type"]}
+        if parsed.get("valid_from"):
+            fields["valid_from"] = parsed["valid_from"]
+        if parsed.get("valid_to"):
+            fields["valid_to"] = parsed["valid_to"]
+        asset_type = "document"
+    else:
+        fields = {"excerpt": masked}
+        asset_type = "image"
+    # 落库口径：库内 / 卡片 / 弹层一律只放脱敏文本；识别原文（可能含号码）走 enc 段密文留存，
+    # 解锁后方可在详情中查看（与 number_full 同一处理，避免明文号码落盘）。
+    sensitive = {}
+    if number:
+        sensitive["number_full"] = number
+    if masked != text:
+        sensitive["ocr_text"] = text
+    try:
+        asset = STORE.add({"type": asset_type, "fields": fields,
+                           "sensitive": sensitive,
+                           "file_path": state.get("ocr_picked") or None})
+    except Exception as exc:
+        state["ocr_error"] = "存入失败：%s" % exc
+        _banner(state, state["ocr_error"], "warn")
+        APP.log("error", state["ocr_error"])
+        return state
+    state["ocr_open"] = False
+    state["ocr_stage"] = "saved"
+    state["ocr_error"] = ""
+    _banner(state, "OCR 结果已存入 Vault：%s" % asset["title"], "info")
+    state["last_action"] = "OCR 录入：%s" % asset["title"]
+    APP.log("info", "ocr saved id=%s type=%s" % (asset["id"], asset["type"]))
+    return reload_items(state)
+
+
+def render(state):
+    """UI 树由 state 派生；此处只根据 viewport 更新自适应列数（不发 IO）。"""
+    width = None
+    if isinstance(APP.viewport, dict):
+        width = APP.viewport.get("width")
+    if not width:
+        width = MIN_VIEWPORT_WIDTH
+    state["viewport_width"] = int(width)
+    state["grid_columns"] = grid_columns_for(width)
+    return build_root(state)
+
+
+def set_filter(state, key):
+    if key not in FILTER_LABELS:
+        key = "all"
+    state["filter"] = key
+    reload_items(state)
+    state["last_action"] = "筛选：%s（%d 条）" % (FILTER_LABELS[key], state["total"])
+    APP.log("info", "filter=%s → %d 条" % (key, state["total"]))
+    return state
+
+
+def set_manual_kind(state, kind):
+    if kind not in MANUAL_KINDS:
+        kind = "document:身份证"
+    state["manual_kind"] = kind
+    state["manual_draft"] = {spec["id"]: spec.get("value", "") for spec in manual_specs(kind)}
+    state["manual_error"] = ""
+    state["last_action"] = "录入类型：%s" % manual_kind_label(kind)
+    return state
+
+
+def on_event(envelope):
+    """兜底事件处理：卡片节点 tap（节点 id 带资产 id）、栅格 select、筛选按键、录入类型按键。"""
+    state = APP.state
+    node_id = envelope.get("node_id") or ""
+    event = envelope.get("event")
+    payload = envelope.get("payload") or {}
+    if node_id.startswith(CARD_PREFIX) and event in ("tap", "select"):
+        return open_detail(state, node_id[len(CARD_PREFIX):])
+    if node_id == "card_wall" and event in ("tap", "select"):
+        aid = _payload_id(payload, state)
+        if aid:
+            return open_detail(state, aid)
+    if node_id.startswith("filt_") and event == "tap":
+        return set_filter(state, node_id[len("filt_"):])
+    if node_id.startswith("kind_") and event == "tap":
+        return set_manual_kind(state, node_id[len("kind_"):])
+    APP.log("warn", "未识别的事件 %s@%s" % (node_id, event))
+    _banner(state, "未识别的操作：%s@%s" % (node_id, event), "warn")
+    return state
+
+
+APP = brick_sdk.BrickApp(render=render, state=dict(INITIAL_STATE), on_event=on_event,
+                         name="vault")
+
+
+def _on_capability_result(call_id, result, error):
+    """能力应答回调：auth.biometric / fs.pick / ocr.recognize 三条链路。"""
+    job = CALL_JOBS.pop(call_id, None)
+    state = APP.state
+    if job is None:
+        APP.log("warn", "收到未知能力应答 id=%s" % call_id)
+        return
+    method, context = job
+    if method == "auth.biometric":
+        state["detail_unlocking"] = False
+        if error:
+            message = _error_text(error, "生物识别验证未通过")
+            state["detail_auth_error"] = message
+            _banner(state, message, "warn")
+            APP.log("warn", "auth.biometric 失败：%s" % message)
+        elif not (result or {}).get("granted", True):
+            message = "验证未通过：未获得生物识别授权"
+            state["detail_auth_error"] = message
+            _banner(state, message, "warn")
+        else:
+            plain = STORE.plain_fields(context)
+            if plain:
+                state["detail_unlocked"] = True
+                state["detail_sensitive"] = plain
+                state["detail_auth_error"] = ""
+                state["last_action"] = "已解锁敏感字段（%s）" % "、".join(
+                    SENSITIVE_LABELS.get(k, k) for k in plain)
+                APP.log("info", "auth.biometric 通过，解密 %d 个字段" % len(plain))
+            else:
+                state["detail_auth_error"] = "未找到可解密的敏感字段"
+                _banner(state, state["detail_auth_error"], "warn")
+    elif method == "fs.pick":
+        if error:
+            state["ocr_error"] = _error_text(error, "选择文件失败")
+            _banner(state, state["ocr_error"], "warn")
+            state["ocr_stage"] = "idle"
+        else:
+            picked = ""
+            if isinstance(result, dict):
+                picked = result.get("path") or ""
+                if not picked:
+                    paths = result.get("paths") or []
+                    picked = paths[0] if paths else ""
+            if not picked:
+                state["ocr_error"] = "未选择任何文件"
+                _banner(state, state["ocr_error"], "warn")
+                state["ocr_stage"] = "idle"
+            else:
+                state["ocr_picked"] = picked
+                state["ocr_error"] = ""
+                state["ocr_stage"] = "picked"
+                if _require_permission(state, "ocr.recognize", "OCR 识别"):
+                    call = APP.call_capability("ocr.recognize",
+                                               {"path": picked, "languages": ["zh-Hans", "en"]})
+                    CALL_JOBS[call] = ("ocr.recognize", picked)
+                    state["ocr_stage"] = "recognizing"
+    elif method == "ocr.recognize":
+        if error:
+            state["ocr_error"] = _error_text(error, "OCR 识别失败")
+            _banner(state, state["ocr_error"], "warn")
+            state["ocr_stage"] = "picked"
+        else:
+            text = ""
+            if isinstance(result, dict):
+                text = result.get("text") or ""
+            elif isinstance(result, str):
+                text = result
+            text = (text or "").strip()
+            if not text:
+                state["ocr_error"] = "OCR 未识别到文本，可换个更清晰的文件重试"
+                _banner(state, state["ocr_error"], "warn")
+                state["ocr_stage"] = "picked"
+            else:
+                parsed = parse_document_fields(text)
+                state["ocr_text"] = text
+                state["ocr_parsed"] = parsed
+                state["ocr_error"] = ""
+                state["ocr_stage"] = "ready"
+                _banner(state, "OCR 完成：识别 %d 字%s" % (
+                    len(text), "，已解析证件字段" if parsed else ""), "info")
+                state["last_action"] = "OCR 识别完成"
+    APP.push()
+
+
+# ---------------------------------------------------------------------------
+# 事件绑定
+# ---------------------------------------------------------------------------
+
+@APP.action("refresh", node_id="btn_refresh")
+def _on_refresh(state, event):
+    reload_items(state)
+    state["last_action"] = "已刷新（%d 条）" % state["total"]
+    APP.log("info", "refresh → %d 条" % state["total"])
+    return state
+
+
+@APP.action("q_change", node_id="search_box", event="change")
+def _on_search_change(state, event):
+    payload = event.get("payload") or {}
+    value = payload.get("value")
+    if value is None:
+        value = payload.get("q") or ""
+    state["q"] = str(value)
+    reload_items(state)
+    state["last_action"] = "检索：%s" % (state["q"] or "（空）")
+    return state
+
+
+@APP.action("search", node_id="search_box", event="submit")
+def _on_search_submit(state, event):
+    payload = event.get("payload") or {}
+    value = payload.get("q")
+    if value is None:
+        value = payload.get("value")
+    if value is not None:
+        state["q"] = str(value)
+    reload_items(state)
+    state["last_action"] = "检索：%s（%d 条）" % (state["q"] or "（空）", state["total"])
+    return state
+
+
+@APP.action("set_filter", node_id="filt_all")
+def _on_filter(state, event):
+    """筛选栏：节点 id ``filt_<key>``（7 个按键共用同一处理器）。"""
+    node_id = event.get("node_id") or ""
+    payload = event.get("payload") or {}
+    key = payload.get("value") or payload.get("filter") or ""
+    if not key and node_id.startswith("filt_"):
+        key = node_id[len("filt_"):]
+    return set_filter(state, str(key) or "all")
+
+
+@APP.action("open_manual", node_id="btn_add")
+def _on_open_manual(state, event):
+    return open_manual(state)
+
+
+@APP.action("set_manual_kind", node_id="kind_document:身份证")
+def _on_set_manual_kind(state, event):
+    node_id = event.get("node_id") or ""
+    payload = event.get("payload") or {}
+    kind = payload.get("value") or payload.get("kind") or ""
+    if not kind and node_id.startswith("kind_"):
+        kind = node_id[len("kind_"):]
+    return set_manual_kind(state, str(kind))
+
+
+@APP.action("manual_change", node_id="manual_form", event="change")
+def _on_manual_change(state, event):
+    """表单 change：只记录草稿并重渲染（D2 可切换为纯 state 帧降级）。"""
+    payload = event.get("payload") or {}
+    field = payload.get("field") or payload.get("field_id")
+    if not field and isinstance(payload, dict):
+        spec_ids = {spec["id"] for spec in manual_specs(state.get("manual_kind") or MANUAL_KINDS[0])}
+        for key in payload:
+            if key in spec_ids:
+                field = key
+                break
+    if field:
+        state.setdefault("manual_draft", {})[str(field)] = payload.get("value", "")
+    APP.log("info", "manual change %s" % field)
+    return state
+
+
+@APP.action("manual_submit", node_id="manual_form", event="submit")
+def _on_manual_submit(state, event):
+    payload = event.get("payload") or {}
+    specs = manual_specs(state.get("manual_kind") or MANUAL_KINDS[0])
+    spec_ids = {spec["id"] for spec in specs}
+    draft = dict(state.get("manual_draft") or {})
+    if isinstance(payload, dict):
+        if str(payload.get("field_id") or "") in spec_ids:  # 单字段提交形态
+            draft[str(payload.get("field_id"))] = payload.get("value", "")
+        else:
+            for key, value in payload.items():
+                if key in spec_ids:
+                    draft[str(key)] = value
+    state["manual_draft"] = draft
+    return save_manual(state, draft)
+
+
+@APP.action("manual_submit_button", node_id="btn_save_asset")
+def _on_manual_save_button(state, event):
+    return save_manual(state, dict(state.get("manual_draft") or {}))
+
+
+@APP.action("close_manual", node_id="btn_close_manual")
+def _on_close_manual(state, event):
+    state["manual_open"] = False
+    state["manual_error"] = ""
+    state["last_action"] = "已取消手动新增"
+    return state
+
+
+@APP.action("open_ocr", node_id="btn_ocr")
+def _on_open_ocr(state, event):
+    state["ocr_open"] = True
+    state["ocr_stage"] = "idle"
+    state["ocr_picked"] = ""
+    state["ocr_text"] = ""
+    state["ocr_parsed"] = {}
+    state["ocr_error"] = ""
+    state["last_action"] = "打开 OCR 录入"
+    return state
+
+
+@APP.action("close_ocr", node_id="btn_close_ocr")
+def _on_close_ocr(state, event):
+    state["ocr_open"] = False
+    state["ocr_error"] = ""
+    state["last_action"] = "已关闭 OCR 录入"
+    return state
+
+
+@APP.action("ocr_pick", node_id="btn_ocr_pick")
+def _on_ocr_pick(state, event):
+    state["ocr_error"] = ""
+    state["ocr_stage"] = "picking"
+    if not _require_permission(state, "fs.pick", "选择文件"):
+        state["ocr_stage"] = "idle"
+        return state
+    if not _require_permission(state, "ocr.recognize", "OCR 识别"):
+        state["ocr_stage"] = "idle"
+        return state
+    call = APP.call_capability("fs.pick", {"kinds": ["image", "pdf"], "multiple": False})
+    CALL_JOBS[call] = ("fs.pick", "")
+    APP.log("info", "capability fs.pick 已发起 id=%s" % call)
+    return state
+
+
+@APP.action("ocr_save", node_id="btn_ocr_save")
+def _on_ocr_save(state, event):
+    return save_ocr(state)
+
+
+@APP.action("unlock", node_id="btn_unlock")
+def _on_unlock(state, event):
+    aid = state.get("detail_id") or ""
+    if not aid:
+        _banner(state, "请先打开一条资产再解锁", "warn")
+        return state
+    if not _require_permission(state, "auth.biometric", "查看敏感字段"):
+        state["detail_unlocking"] = False
+        state["detail_auth_error"] = ("未授予「auth.biometric」权限，无法解锁；"
+                                      "请在系统设置中授权后重试（错误码 %d）"
+                                      % brick_sdk.ERR_CAPABILITY_DENIED)
+        state["last_action"] = "敏感字段解锁被拒（权限未授予）"
+        return state
+    state["detail_unlocking"] = True
+    state["detail_auth_error"] = ""
+    call = APP.call_capability("auth.biometric",
+                               {"reason": "解锁 Vault 敏感字段", "asset_id": aid})
+    CALL_JOBS[call] = ("auth.biometric", aid)
+    APP.log("info", "capability auth.biometric 已发起 id=%s" % call)
+    return state
+
+
+@APP.action("ask_delete", node_id="btn_delete")
+def _on_ask_delete(state, event):
+    """删除第一步：只亮确认框，不动数据。"""
+    state["confirm_delete"] = True
+    state["last_action"] = "待确认删除"
+    return state
+
+
+@APP.action("cancel_delete", node_id="btn_cancel_delete")
+def _on_cancel_delete(state, event):
+    state["confirm_delete"] = False
+    state["last_action"] = "已取消删除"
+    return state
+
+
+@APP.action("confirm_delete", node_id="btn_confirm_delete")
+def _on_confirm_delete(state, event):
+    """删除第二步：用户已确认 → 移除条目与私有文件。"""
+    aid = state.get("detail_id") or ""
+    ok = STORE.delete(aid) if aid else False
+    state["confirm_delete"] = False
+    state["detail_open"] = False
+    if not ok:
+        _banner(state, "删除失败：条目不存在（%s）" % aid, "warn")
+        return state
+    reload_items(state)
+    _banner(state, "已删除该条目", "info")
+    state["last_action"] = "已删除 %s" % aid
+    APP.log("info", "deleted id=%s，剩余 %d 条" % (aid, STORE.count()))
+    return state
+
+
+@APP.action("close_detail", node_id="btn_close_detail")
+def _on_close_detail(state, event):
+    state["detail_open"] = False
+    state["confirm_delete"] = False
+    state["detail_sensitive"] = {}
+    state["detail_unlocked"] = False
+    state["last_action"] = "已关闭详情"
+    return state
+
+
+APP._on_capability_result = _on_capability_result
+
+
+def _startup_checks():
+    """启动自检：预载条目 + 权限口径落 stderr（不阻塞启动、不静默、握手前不占用 stdout）。"""
+    fresh = dict(INITIAL_STATE)
+    reload_items(fresh)
+    APP.state.update(fresh)
+    _stderr("[vault] 预载完成：vault_dir=%s，现有 %d 条；调用未授予的权限时将回 4309 并明确提示"
+            % (STORE.root, STORE.count()))
+
+
+def _stderr(text):
+    try:
+        sys.stderr.write(text.rstrip("\n") + "\n")
+        sys.stderr.flush()
+    except (BrokenPipeError, OSError, ValueError):
+        pass
+
+
+if __name__ == "__main__":
+    sys.stderr.write("[vault] start pid=%d vault_dir=%s sdk=%s\n"
+                     % (os.getpid(), STORE.root, _SDK_DIR))
+    sys.stderr.flush()
+    _startup_checks()
+    raise SystemExit(brick_sdk.serve(APP))
