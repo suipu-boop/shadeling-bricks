@@ -3,7 +3,7 @@
   "brick_id": "com.shadeling.brick.vault",
   "name": "vault",
   "title": "本地资产中枢",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "summary": "本地资产中枢：证件/图片/网页/笔记/技能快照的本地归档、检索与证件 OCR 识别。",
   "author": "Shadeling",
   "kind": "product",
@@ -24,7 +24,7 @@
     "runtime": "python3",
     "args": [],
     "env": {},
-    "sha256": "3f137ef29602523fc69bb925eb375919aee4f5cb1f351ca91bf8d194cf465779"
+    "sha256": "b503c327bbd0646056194de6d6c86e4c2c1cb4dd8ed1b741477dbf2665c4ecf2"
   },
   "permissions": [
     "fs.pick",
@@ -37,7 +37,7 @@
     "storage_mb": 256,
     "rss_mb": 512
   },
-  "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/vault/releases/1.2.1/vault-1.2.1.zip",
-  "sha256": "b86c78af911ae3e28e2c5d6ee02db12f7ec673a00ed6a5b86c49f56cc6f6af57",
-  "release_notes": "D3：能力代理接线对齐真实底座回执（业务值在 data 层解包）。auth.biometric 补 granted 权威键、键缺失一律视为未通过；fs.pick 支持 kinds 过滤、用户取消静默回空闲；ocr.recognize 从 data 取文本。协议级自测扩至 61 项（新增 P9 真实回执负例 7 项）。"
+  "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/vault/releases/1.2.2/vault-1.2.2.zip",
+  "sha256": "1f1367c6f992fd20cc2d7257b61d8df7e3736103262d4143e7cf5b6c0ce94b45",
+  "release_notes": "D4：库落盘改走宿主注入的私有数据目录（bricks/<brick_id>/data，安装目录之外），卸载重装不丢；首次启动逐字节 sha256 接管旧全局库（源库保留，失败回退不丢数据）。自测扩至 69 项（新增 P10 私有目录接管 8 项）。"
 }

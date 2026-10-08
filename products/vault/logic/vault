@@ -40,6 +40,7 @@
 """
 
 import copy
+import hashlib
 import json
 import os
 import re
@@ -139,16 +140,83 @@ CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
 # 数据层：与 runtime/vault_store.py、Swift VaultStore 同库同构（表 / 加密 / 路径三对齐）
 # ---------------------------------------------------------------------------
 
-def resolve_vault_dir():
-    """库位置推导（与 Swift ``VaultPaths.vaultDir`` 一致）。"""
-    home_env = os.environ.get("SHADELING_HOME")
-    if home_env:
-        return os.path.join(home_env, "vault")
+VAULT_SCOPE = "legacy"      # home / private / legacy，观测用（D4）
+
+
+def _sha256_file(path):
+    """文件级 sha256（旧库接管时逐字节核对；读取失败返回空串）。"""
+    digest = hashlib.sha256()
+    try:
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(65536), b""):
+                digest.update(chunk)
+    except OSError:
+        return ""
+    return digest.hexdigest()
+
+
+def legacy_vault_dir():
+    """旧口径库位置（与 Swift ``VaultPaths.vaultDir`` 回退链一致）。"""
     app_support = os.path.join(os.path.expanduser("~/Library/Application Support"),
                                "Shadeling", "vault")
     if os.path.isdir(app_support):
         return app_support
     return os.path.join(os.path.expanduser("~"), ".shadeling", "vault")
+
+
+def adopt_legacy_vault(private_vault):
+    """D4：首次以私有目录启动时接管旧全局库（复制 + 逐字节校验，源文件一律不动）。
+
+    返回 True 表示私有目录可用（已有库 / 全新冷启 / 接管成功）；
+    返回 False 表示接管失败，调用方回退旧目录——宁可用旧库也不丢数据。
+    校验失败时保留 ``.vault.db.adopting`` 供排查，不删除任何文件。
+    """
+    if os.path.isfile(os.path.join(private_vault, "vault.db")):
+        return True
+    source = os.path.join(legacy_vault_dir(), "vault.db")
+    if not os.path.isfile(source):
+        return True          # 全新安装：私有目录冷启
+    try:
+        os.makedirs(private_vault, exist_ok=True)
+        staging = os.path.join(private_vault, ".vault.db.adopting")
+        shutil.copy2(source, staging)
+        if _sha256_file(staging) != _sha256_file(source):
+            sys.stderr.write("[vault] 旧库接管校验失败（副本与源哈希不一致），保留样本 %s 并回退旧目录 %s\n"
+                             % (staging, source))
+            return False
+        os.replace(staging, os.path.join(private_vault, "vault.db"))
+        source_key = os.path.join(os.path.dirname(source), ".vault_key")
+        target_key = os.path.join(private_vault, ".vault_key")
+        if os.path.isfile(source_key) and not os.path.exists(target_key):
+            shutil.copy2(source_key, target_key)
+            os.chmod(target_key, 0o600)
+        sys.stderr.write("[vault] 已接管旧库：%s → %s（源文件保留）\n" % (source, private_vault))
+        return True
+    except OSError as exc:
+        sys.stderr.write("[vault] 旧库接管失败（%s），回退旧目录\n" % exc)
+        return False
+
+
+def resolve_vault_dir():
+    """库位置推导：SHADELING_HOME（显式）→ 宿主私有目录 → 旧全局回退链。
+
+    2026-10-08（D4）：宿主自 Phase D 起注入 ``SHADELING_BRICK_PRIVATE_DIR``
+    （= ``Bricks/<brick_id>/data``，契约 §6.2 私有存储）。库落私有目录后与安装目录分离，
+    卸载重装不丢；首次切换按 ``adopt_legacy_vault`` 接管旧全局库（不删源）。
+    """
+    global VAULT_SCOPE
+    home_env = os.environ.get("SHADELING_HOME")
+    if home_env:
+        VAULT_SCOPE = "home"
+        return os.path.join(home_env, "vault")
+    private_env = (os.environ.get("SHADELING_BRICK_PRIVATE_DIR") or "").strip()
+    if private_env:
+        private_vault = private_env          # 私有目录即积木数据根，库文件 <private>/vault.db（契约 §6.2）
+        if adopt_legacy_vault(private_vault):
+            VAULT_SCOPE = "private"
+            return private_vault
+    VAULT_SCOPE = "legacy"
+    return legacy_vault_dir()
 
 
 def _openssl_bin():
@@ -1563,8 +1631,8 @@ def _startup_checks():
     fresh = dict(INITIAL_STATE)
     reload_items(fresh)
     APP.state.update(fresh)
-    _stderr("[vault] 预载完成：vault_dir=%s，现有 %d 条；调用未授予的权限时将回 4309 并明确提示"
-            % (STORE.root, STORE.count()))
+    _stderr("[vault] 预载完成：vault_dir=%s（scope=%s），现有 %d 条；调用未授予的权限时将回 4309 并明确提示"
+            % (STORE.root, VAULT_SCOPE, STORE.count()))
     _stderr("[vault] UI 声明：%s%s" % ("ui/main.json 已载入" if isinstance(UI_BASE, dict) else "回退内置骨架",
                                        ("；" + UI_LOAD_NOTE) if UI_LOAD_NOTE else ""))
 

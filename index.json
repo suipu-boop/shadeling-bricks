@@ -42,7 +42,7 @@
       "path": "bricks/ppt-studio/"
     }
   ],
-  "updated_at": "2026-10-08T20:28:46",
+  "updated_at": "2026-10-08T20:40:00",
   "products": [
     {
       "name": "wechat-mp",
@@ -53,10 +53,10 @@
     },
     {
       "name": "vault",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "kind": "product",
-      "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/vault/releases/1.2.1/vault-1.2.1.zip",
-      "sha256": "b86c78af911ae3e28e2c5d6ee02db12f7ec673a00ed6a5b86c49f56cc6f6af57"
+      "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/vault/releases/1.2.2/vault-1.2.2.zip",
+      "sha256": "1f1367c6f992fd20cc2d7257b61d8df7e3736103262d4143e7cf5b6c0ce94b45"
     },
     {
       "name": "acct-perm",

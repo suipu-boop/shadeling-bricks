@@ -14,6 +14,8 @@
   场景 P5  4302 UI 引擎不支持（负例）
   场景 P6  4305 连续帧解码失败 → 4308 退出（负例）
   场景 P7  持久化：正常退出重启 / SIGKILL 异常退出重启，条目数与 DB 校验和一致
+  场景 P10 D4 私有目录：宿主注入 SHADELING_BRICK_PRIVATE_DIR 后库落私有目录、
+           旧全局库逐字节接管（源不动）、卸载重装（同私有目录重启）不丢
 
 约束：自测装置本身与沙箱数据均落在系统临时目录；被测进程通过 SHADELING_HOME 指向沙箱，
 绝不触碰真实 ~/.shadeling/vault。
@@ -107,11 +109,15 @@ class _Tee:
 class Peer:
     """被测逻辑进程 + 底座侧帧通道。"""
 
-    def __init__(self, tag, granted=None, declared=None, logic=None):
+    def __init__(self, tag, granted=None, declared=None, logic=None,
+                 extra_env=None, drop_env=()):
         self.tag = tag
         env = dict(os.environ)
         env["SHADELING_HOME"] = HOME
         env["SHADELING_BRICK_SDK_DIR"] = SDK_DIR
+        for key in drop_env:
+            env.pop(key, None)
+        env.update(dict(extra_env or {}))
         self.proc = subprocess.Popen(
             [sys.executable, logic or LOGIC], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE, env=env, bufsize=0)
@@ -350,6 +356,15 @@ def db_digest():
     rows = [(r[0], r[1], r[2], r[3]) for r in db_rows()]
     blob = json.dumps(rows, ensure_ascii=False, sort_keys=True).encode("utf-8")
     return hashlib.sha256(blob).hexdigest(), len(rows)
+
+
+def file_sha256(path):
+    """文件级 sha256（D4 接管核对用）。"""
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -1112,6 +1127,88 @@ def scenario_persistence():
 
 
 # ---------------------------------------------------------------------------
+# 场景 P10：D4 私有目录接管 / 卸载重装不丢
+# ---------------------------------------------------------------------------
+
+def scenario_d4_private_store():
+    print("\n== 场景 P10：D4 私有目录接管 · 卸载重装不丢 ==")
+    base = os.path.join(WORK, "d4")
+    fake_home = os.path.join(base, "fakehome")
+    legacy = os.path.join(fake_home, "Library", "Application Support", "Shadeling", "vault")
+    private = os.path.join(base, "Bricks", BRICK_ID, "data")
+    os.makedirs(legacy, exist_ok=True)
+    source_db = os.path.join(legacy, "vault.db")
+    shutil.copy2(DB, source_db)
+    source_digest = file_sha256(source_db)
+    _, rows_expected = db_digest()
+    inject = {"HOME": fake_home, "SHADELING_BRICK_PRIVATE_DIR": private}
+
+    # --- 首次以私有目录启动：接管旧全局库
+    peer = Peer("p10-adopt", extra_env=inject, drop_env=("SHADELING_HOME",))
+    try:
+        peer.initialize()
+        frame = peer.initialized()
+        snap = (frame or {}).get("params", {}).get("state_snapshot", {})
+        private_db = os.path.join(private, "vault.db")
+        CHK("P10.1", "注入私有目录后库落私有目录（scope=private）",
+            os.path.isfile(private_db) and any("scope=private" in l for l in peer.stderr),
+            "private_db=%s stderr=%r" % (os.path.isfile(private_db), peer.stderr[-3:]))
+        CHK("P10.2", "接管旧库后条目数与旧库一致",
+            snap.get("total") == rows_expected,
+            "total=%r expected=%r" % (snap.get("total"), rows_expected))
+        CHK("P10.3", "接管为逐字节复制（sha256 与源一致）",
+            file_sha256(private_db) == source_digest,
+            "%s vs %s" % (file_sha256(private_db)[:12], source_digest[:12]))
+        CHK("P10.4", "源库保留未被动过（可后悔）",
+            os.path.isfile(source_db) and file_sha256(source_db) == source_digest)
+        peer.shutdown()
+        peer.wait_exit()
+    finally:
+        peer.kill()
+        peer.close()
+
+    # --- 卸载重装语义：安装目录与私有目录分离，重启（同私有目录）数据不丢
+    install_dir = os.path.join(base, "Bricks", "vault")        # 宿主卸载时删除的是安装目录
+    os.makedirs(install_dir, exist_ok=True)
+    adopted_digest = file_sha256(os.path.join(private, "vault.db"))
+    peer = Peer("p10-reinstall", extra_env=inject, drop_env=("SHADELING_HOME",))
+    try:
+        peer.initialize()
+        frame = peer.initialized()
+        snap = (frame or {}).get("params", {}).get("state_snapshot", {})
+        CHK("P10.5", "卸载重装（同私有目录重启）后条目数不变",
+            snap.get("total") == rows_expected,
+            "total=%r expected=%r" % (snap.get("total"), rows_expected))
+        CHK("P10.6", "库位于安装目录之外（卸载不波及私有数据）",
+            os.path.commonpath([os.path.abspath(private), os.path.abspath(install_dir)])
+            != os.path.abspath(install_dir),
+            "private=%s install=%s" % (private, install_dir))
+        CHK("P10.7", "重装后私有库文件 sha256 稳定（无半写 / 无重复接管）",
+            file_sha256(os.path.join(private, "vault.db")) == adopted_digest,
+            "%s vs %s" % (file_sha256(os.path.join(private, "vault.db"))[:12], adopted_digest[:12]))
+        peer.shutdown()
+        peer.wait_exit()
+    finally:
+        peer.kill()
+        peer.close()
+
+    # --- 向后兼容：两路注入都缺席时仍走旧口径（不因新增分支弄丢老用户库）
+    peer = Peer("p10-legacy", extra_env={"HOME": fake_home}, drop_env=("SHADELING_HOME",))
+    try:
+        peer.initialize()
+        frame = peer.initialized()
+        snap = (frame or {}).get("params", {}).get("state_snapshot", {})
+        CHK("P10.8", "无私有目录注入时回退旧全局库（向后兼容）",
+            snap.get("total") == rows_expected,
+            "total=%r expected=%r" % (snap.get("total"), rows_expected))
+        peer.shutdown()
+        peer.wait_exit()
+    finally:
+        peer.kill()
+        peer.close()
+
+
+# ---------------------------------------------------------------------------
 # 静态/结构核验（非协议帧，辅助证据）
 # ---------------------------------------------------------------------------
 
@@ -1238,6 +1335,7 @@ def main():
     scenario_negative()
     scenario_ui_fallback()
     scenario_persistence()
+    scenario_d4_private_store()
 
     passed = sum(1 for c in CHECKS if c["status"] == "PASS")
     skipped = list(SUPERSEDED)

@@ -970,6 +970,32 @@ Content-Length: <字节数>\r\n
 3. `fs.pick` 的取消是正常路径，不记错误、不弹失败提示。
 4. `granted: false` 时必须给出可读原因（优先宿主 `error` 文案，其次本地兜底文案），且**不得部分解锁**。
 
+### 5.3.7 数据落盘与私有目录口径（D4，2026-10-08 落地）
+
+**落盘位置推导链**（逻辑进程与旧 Swift `VaultPaths.vaultDir` 同源，向后兼容）：
+
+| 优先级 | 条件 | 库位置 | scope |
+|---|---|---|---|
+| 1 | 显式注入 `SHADELING_HOME` | `$SHADELING_HOME/vault/vault.db` | `home`（自测 / CI） |
+| 2 | 宿主注入 `SHADELING_BRICK_PRIVATE_DIR`（= `bricks/<brick_id>/data`，§6.2） | `$SHADELING_BRICK_PRIVATE_DIR/vault.db` | `private`（正式运行） |
+| 3 | 两路都缺席 | `~/Library/Application Support/Shadeling/vault`（存在时）→ `~/.shadeling/vault` | `legacy` |
+
+**首次切换的旧库接管**：
+
+1. 私有目录已有 `vault.db` → 直接使用（幂等，不重复接管）。
+2. 私有目录无库且旧全局库存在 → 复制到私有目录，**逐字节 sha256 核对**一致才启用（`os.replace` 原子落位）；
+   **旧库原文件一律保留**（可后悔），`.vault_key`（若存在）同法复制并置 0600。
+3. 核对失败或 IO 异常 → **回退旧目录**（宁可用旧库也不丢数据），stderr 明示原因，不删除任何文件。
+
+**卸载重装不丢**：安装目录 `Bricks/<安装名>`（宿主 `BrickPaths.installedProductRoot`）与私有目录
+`bricks/<brick_id>/data` 分离；`AppModel.uninstallBrick` 只移除安装目录，私有库保留，重装后同 `brick_id`
+读到同一份数据（回归项 P10.1~P10.8 常驻）。安装名与 `brick_id` 必须保持不同（现有 vault = 安装名
+`vault` / `brick_id` `com.shadeling.brick.vault`），避免 macOS 大小写不敏感文件系统下 `bricks/` 与
+`Bricks/` 同目录带来的边界歧义。
+
+**校验和口径**：迁移 / 重装验收用两层——① 文件级 sha256（接管逐字节核对）；② 行级内容摘要
+（`SELECT id,type,title,payload ORDER BY created_at,id` 的 sha256）。两者跨重装均须一致。
+
 ## 5.4 配额体系
 
 ### 沿用既有口径（不重新定义）
