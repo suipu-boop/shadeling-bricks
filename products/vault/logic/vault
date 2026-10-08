@@ -3,8 +3,8 @@
 """vault 逻辑进程 —— 声明式积木 ``com.shadeling.brick.vault``（契约 §7.5 Phase D1）。
 
 职责：把 vault 的业务状态机从原生界面实现（``source/Sources/Vault/``）抽离到
-``jsonrpc-stdio/1`` 逻辑进程；UI 树由本进程按 state 产出（D2 落 ``ui/*.json`` 后改为
-「UI 文档声明在包内、逻辑进程只推 state」，届时 render 会优先复用包内 root）。
+``jsonrpc-stdio/1`` 逻辑进程；UI 树声明在包内 ``ui/main.json``（D2 已落地：``shadeling-ui/1``
+文档为唯一结构真相），本进程只填动态数据面（卡片墙 / 筛选态 / 检索词 / 表单字段）并推动 state。
 
 覆盖的业务动作（与 Swift 侧逐项对齐）：
   - 命令栏：关键词检索（search change/submit）、手动新增入口、刷新；
@@ -39,6 +39,7 @@
     SHADELING_BRICK_SDK_DIR=<repo>/sdk/python python3 products/vault/logic/vault
 """
 
+import copy
 import json
 import os
 import re
@@ -236,8 +237,11 @@ def encrypt_text(plain, key):
 
 
 def decrypt_text(blob, key):
+    # 末尾必须补换行：openssl enc 的 base64 读取器在最后一行缺 LF 时报
+    # "error reading input file"（OpenSSL 3 与 LibreSSL 一致，subprocess 直喂 stdin 时必现）。
+    payload = (blob or "").rstrip("\r\n") + "\n"
     proc = _run([_openssl_bin(), "enc", "-d", "-aes-256-cbc", "-pbkdf2",
-                 "-pass", "pass:%s" % key, "-base64"], stdin_text=blob)
+                 "-pass", "pass:%s" % key, "-base64"], stdin_text=payload)
     if proc is None or proc.returncode != 0:
         raise RuntimeError("解密失败（openssl）：%s" % (proc.stderr if proc else "无法启动"))
     return proc.stdout or ""
@@ -455,6 +459,10 @@ class VaultStore:
         for name, value in sensitive.items():
             if value:
                 enc[name] = self.encrypt(str(value))
+                # 通用掩码：敏感明文字段一律同步派生 <base>_masked（列表/卡片口径不泄明文；
+                # document 的 number_full 已在上面处理，此处不覆盖既有值）
+                base = name[:-5] if name.endswith("_full") else name
+                fields.setdefault(base + "_masked", mask_number(value))
 
         # 网页资产：默认不做网络抓取（本地优先）；仅显式开启时抓标题/摘要
         if typ == "webpage" and not fields.get("excerpt") and fields.get("url"):
@@ -738,213 +746,218 @@ def _button(node_id, label, action, style=None):
     return node
 
 
-def build_root(state):
-    """按 state 产出 UI 文档 root（纯函数：不做 IO，卡片数据来自 state["items"]）。"""
-    children = []
+# ---------------------------------------------------------------------------
+# UI 文档装配（D2）：UI 声明在包内 ``ui/main.json``，逻辑进程只填动态数据
+# ---------------------------------------------------------------------------
 
-    # ---- 命令栏 ----
-    search_form = {
-        "type": "form", "id": "search_box",
-        "props": {
-            "submit_label": "查找",
-            "fields": [{"id": "q", "placeholder": "查找资产 / 网址 / 内容", "value": state.get("q", "")}],
-        },
-        "on": {"change": "q_change", "submit": "search"},
+UI_ENTRY = os.path.join(PACKAGE_ROOT, "ui", "main.json")
+UI_LOAD_NOTE = ""
+
+OCR_STAGE_LABELS = {
+    "idle": "空闲",
+    "picked": "已选择文件",
+    "recognizing": "识别中",
+    "ready": "已解析",
+    "saved": "已入库",
+}
+
+OCR_ROW_KEYS = (
+    ("doc_type", "证件类型"),
+    ("number_full", "证件号码"),
+    ("valid_from", "生效日期"),
+    ("valid_to", "到期日期"),
+)
+
+
+def _load_ui_base():
+    """载入包内 UI 声明 root；失败返回 None（由 :func:`_fallback_root` 兜底并记录原因）。"""
+    if not os.path.isfile(UI_ENTRY):
+        _set_ui_note("包内缺少 ui/main.json")
+        return None
+    try:
+        with open(UI_ENTRY, "r", encoding="utf-8") as handle:
+            document = json.load(handle)
+    except (OSError, ValueError) as exc:
+        _set_ui_note("ui/main.json 载入失败：%s" % exc)
+        return None
+    if document.get("schema") != "shadeling-ui/1":
+        _set_ui_note("ui/main.json schema 非 shadeling-ui/1")
+        return None
+    root = document.get("root")
+    if not isinstance(root, dict) or root.get("id") != "root":
+        _set_ui_note("ui/main.json 缺少合法 root")
+        return None
+    return root
+
+
+def _set_ui_note(message):
+    global UI_LOAD_NOTE
+    UI_LOAD_NOTE = message
+
+
+UI_BASE = _load_ui_base()
+
+KIND_BY_LABEL = dict((manual_kind_label(kind), kind) for kind in MANUAL_KINDS)
+
+
+def _sync_derived(state):
+    """把业务 state 派生为渲染器可直接插值的字段（纯计算，不发 IO）。"""
+    state["subtitle"] = "本地资产中枢 · %d 条" % int(state.get("total") or 0)
+    level = state.get("banner_level") or "info"
+    has_banner = bool(state.get("banner"))
+    state["banner_is_info"] = has_banner and level != "warn"
+    state["banner_is_warn"] = has_banner and level == "warn"
+    state["last_action_line"] = "最近操作：%s" % (state.get("last_action") or "-")
+    state["list_hint"] = "仅显示最近 %d 条，请用检索 / 筛选缩小范围" % LIST_LIMIT
+    state["empty_hint_present"] = not (state.get("items") or [])
+    state["manual_kind_label"] = manual_kind_label(state.get("manual_kind") or "document:身份证")
+    state["manual_error_present"] = bool(state.get("manual_error"))
+
+    state["ocr_stage_label"] = OCR_STAGE_LABELS.get(state.get("ocr_stage") or "idle", "空闲")
+    picked = state.get("ocr_picked") or ""
+    state["ocr_has_picked"] = bool(picked)
+    state["ocr_picked_line"] = "已选文件：%s" % picked
+    ocr_text = state.get("ocr_text") or ""
+    state["ocr_has_text"] = bool(ocr_text)
+    state["ocr_text_masked"] = mask_sensitive_text(ocr_text) if ocr_text else ""
+    rows = []
+    parsed = state.get("ocr_parsed") or {}
+    for key, label in OCR_ROW_KEYS:
+        value = parsed.get(key)
+        if value:
+            rows.append({"label": label, "value": mask_sensitive_text(str(value))})
+    state["ocr_rows"] = rows
+    state["ocr_has_parsed"] = bool(rows)
+    state["ocr_has_error"] = bool(state.get("ocr_error"))
+
+    state["detail_has_rows"] = bool(state.get("detail_rows"))
+    # detail_has_sensitive 由 _open_detail / _on_close_detail 维护（来源是 asset.has_sensitive），
+    # 不可在派生里改用 detail_sensitive：解锁前该字典恒为空会误判为「无敏感」。
+    state["detail_has_auth_error"] = bool(state.get("detail_auth_error"))
+    state["detail_can_unlock"] = not state.get("detail_unlocked") and not state.get("detail_unlocking")
+    state["detail_has_ai"] = bool(state.get("detail_ai_summary"))
+    tags = state.get("detail_ai_tags") or []
+    state["detail_has_ai_tags"] = bool(tags)
+    state["detail_ai_tags_line"] = "、".join("#%s" % t for t in tags)
+    sensitive_rows = []
+    if state.get("detail_unlocked"):
+        # 已解锁：按需求展示明文（掩码只用于未解锁态的摘要/OCR 预览行）。
+        for key, value in (state.get("detail_sensitive") or {}).items():
+            sensitive_rows.append({
+                "text": "%s：%s" % (SENSITIVE_LABELS.get(key, key), str(value))})
+    state["detail_sensitive_rows"] = sensitive_rows
+    return state
+
+
+def _ui_index(root):
+    """按 id 索引节点（含 overlay content 子树），供状态填充定位。"""
+    index = {}
+
+    def walk(node):
+        if not isinstance(node, dict):
+            return
+        node_id = node.get("id")
+        if node_id:
+            index[node_id] = node
+        for child in node.get("children") or []:
+            walk(child)
+        content = (node.get("props") or {}).get("content")
+        if isinstance(content, dict):
+            walk(content)
+
+    walk(root)
+    return index
+
+
+def _asset_card(asset):
+    """资产卡片节点（props 键严格取卡片白名单，避免整条资产对象塞进 UI 文档）。"""
+    props = {
+        "title": asset.get("title") or "",
+        "subtitle": asset.get("subtitle") or "",
+        "meta": "%s · %s" % (asset.get("type_label") or "", asset.get("updated_rel") or ""),
     }
-    children.append({
-        "type": "container", "id": "cmd_bar",
-        "props": {"direction": "horizontal", "gap": 12, "align": "center"},
+    if asset.get("is_ai"):
+        props["badge"] = "AI"
+    if asset.get("has_sensitive"):
+        props["tags"] = ["已加密"]
+    return {"type": "card", "id": "%s%s" % (CARD_PREFIX, asset["id"]),
+            "props": props, "on": {"tap": "open_detail"}}
+
+
+def _manual_fields(state):
+    """手动新增表单字段：按录入类型重建字面数组（含敏感字段的 secret 输入口）。"""
+    draft = state.get("manual_draft") or {}
+    fields = []
+    for spec in manual_specs(state.get("manual_kind") or "document:身份证"):
+        field = {
+            "field_id": spec["id"],
+            "kind": "secret" if spec.get("sensitive") else "field",
+            "label": spec["label"],
+            "value": str(draft.get(spec["id"], spec.get("value", "")) or ""),
+        }
+        if spec.get("placeholder"):
+            field["placeholder"] = spec["placeholder"]
+        fields.append(field)
+    return fields
+
+
+def _fill_from_state(root, state):
+    """把 state 落进包内骨架：只改数据面（卡片墙 / 筛选态 / 检索词 / 表单字段）。"""
+    index = _ui_index(root)
+
+    wall = index.get("card_wall")
+    if isinstance(wall, dict):
+        wall.setdefault("props", {})["columns"] = int(state.get("grid_columns") or 3)
+        wall["children"] = [_asset_card(item) for item in (state.get("items") or [])]
+
+    for key in FILTER_LABELS:
+        button = index.get("filt_%s" % key)
+        if isinstance(button, dict):
+            button.setdefault("props", {})["style"] = "primary" if key == state.get("filter") else "ghost"
+
+    search = index.get("search_box")
+    fields = (search or {}).get("props", {}).get("fields") if isinstance(search, dict) else None
+    if fields:
+        fields[0]["value"] = state.get("q") or ""
+
+    kind_form = index.get("manual_kind_form")
+    kind_fields = (kind_form or {}).get("props", {}).get("fields") if isinstance(kind_form, dict) else None
+    if kind_fields:
+        kind_fields[0]["value"] = state.get("manual_kind_label") or ""
+
+    manual_form = index.get("manual_form")
+    if isinstance(manual_form, dict):
+        manual_form.setdefault("props", {})["fields"] = _manual_fields(state)
+
+    return root
+
+
+def _fallback_root(state):
+    """包内 UI 声明不可用时的最小骨架（显式提示，不静默降级）。"""
+    return {
+        "type": "container",
+        "id": "root",
+        "props": {"direction": "vertical", "gap": 14, "padding": PADDING},
         "children": [
-            _text("app_title", "Vault", style="title"),
-            _text("app_subtitle", "本地资产中枢 · %d 条" % int(state.get("total") or 0), style="caption"),
-            search_form,
-            _button("btn_add", "手动新增", "open_manual", style="primary"),
-            _button("btn_ocr", "OCR 录入", "open_ocr"),
-            _button("btn_refresh", "刷新", "refresh"),
+            _text("app_title", "Vault", "title"),
+            _text("load_error", "包内 UI 声明不可用：%s" % (UI_LOAD_NOTE or "未知原因"), "caption", 3),
+            _text("app_subtitle", "{{state.subtitle}}", "caption"),
+            {"type": "grid", "id": "card_wall",
+             "props": {"columns": int(state.get("grid_columns") or 3),
+                       "min_column_width": GRID_MIN_W, "gap": GRID_GAP},
+             "children": [_asset_card(item) for item in (state.get("items") or [])]},
+            _text("last_action", "{{state.last_action_line}}", "caption"),
         ],
-    })
+    }
 
-    # ---- 筛选栏 ----
-    chips = []
-    for key, label in FILTERS:
-        chips.append(_button("filt_%s" % key, label, "set_filter",
-                             style="primary" if state.get("filter") == key else "ghost"))
-    children.append({
-        "type": "container", "id": "filter_bar",
-        "props": {"direction": "horizontal", "gap": 8},
-        "children": chips,
-    })
 
-    # ---- 卡片墙（自适应栅格；列数见 state.grid_columns）----
-    cards = []
-    for item in state.get("items") or []:
-        badge = "AI" if item.get("is_ai") else ""
-        cards.append({
-            "type": "card", "id": "%s%s" % (CARD_PREFIX, item["id"]),
-            "props": {
-                "title": item.get("title", ""),
-                "subtitle": item.get("subtitle", ""),
-                "caption": item.get("type_label", ""),
-                "badge": badge,
-                "locked": bool(item.get("has_sensitive")),
-                "footnote": item.get("updated_rel", ""),
-            },
-            "on": {"tap": "open_detail"},
-        })
-    if not cards:
-        cards.append(_text("empty_hint", "暂无资产 · 可用「手动新增」或「OCR 录入」添加", style="caption"))
-    children.append({
-        "type": "grid", "id": "card_wall",
-        "props": {"min_column_width": GRID_MIN_W, "max_column_width": GRID_MAX_W,
-                  "gap": GRID_GAP_LOCAL, "columns": int(state.get("grid_columns") or 1)},
-        "children": cards,
-    })
-    if state.get("truncated"):
-        children.append(_text("list_hint", "仅显示最近 %d 条，请用检索/筛选缩小范围" % LIST_LIMIT,
-                              style="caption"))
+def build_root(state):
+    """按 state 产出 UI root：包内骨架（ui/main.json）+ 动态数据填充（纯函数，不做卡 IO）。"""
+    _sync_derived(state)
+    if not isinstance(UI_BASE, dict):
+        return _fallback_root(state)
+    return _fill_from_state(copy.deepcopy(UI_BASE), state)
 
-    # ---- 手动新增弹层 ----
-    if state.get("manual_open"):
-        kind = state.get("manual_kind") or "document:身份证"
-        draft = state.get("manual_draft") or {}
-        fields = []
-        for spec in manual_specs(kind):
-            fields.append({
-                "id": spec["id"],
-                "label": spec["label"] + ("（加密存储）" if spec.get("sensitive") else ""),
-                "placeholder": spec.get("placeholder", ""),
-                "value": draft.get(spec["id"], spec.get("value", "")),
-                "sensitive": bool(spec.get("sensitive")),
-            })
-        kind_chips = [
-            {"type": "button", "id": "kind_%s" % k, "props": {
-                "label": manual_kind_label(k),
-                "style": "primary" if k == kind else "ghost"},
-             "on": {"tap": "set_manual_kind"}}
-            for k in MANUAL_KINDS
-        ]
-        sheet_children = [
-            _text("manual_title", "手动新增", style="heading"),
-            {"type": "container", "id": "manual_kinds",
-             "props": {"direction": "horizontal", "gap": 6}, "children": kind_chips},
-            {"type": "form", "id": "manual_form",
-             "props": {"submit_label": "存入 Vault", "fields": fields},
-             "on": {"change": "manual_change", "submit": "manual_submit"}},
-        ]
-        if state.get("manual_error"):
-            sheet_children.append(_text("manual_error", state["manual_error"], style="caption"))
-        sheet_children.append({
-            "type": "container", "id": "manual_actions",
-            "props": {"direction": "horizontal", "gap": 8},
-            "children": [_button("btn_save_asset", "存入 Vault", "manual_submit", style="primary"),
-                         _button("btn_close_manual", "取消", "close_manual")],
-        })
-        children.append({"type": "overlay", "id": "manual_sheet",
-                         "props": {"kind": "sheet", "title": "手动新增", "height": 560},
-                         "children": sheet_children})
-
-    # ---- OCR 录入弹层 ----
-    if state.get("ocr_open"):
-        ocr_children = [
-            _text("ocr_title", "OCR 录入", style="heading"),
-            _text("ocr_stage", "阶段：%s" % (state.get("ocr_stage") or "idle"), style="caption"),
-        ]
-        if state.get("ocr_picked"):
-            ocr_children.append(_text("ocr_picked", "已选文件：%s" % state["ocr_picked"], style="caption", lines=2))
-        if state.get("ocr_text"):
-            ocr_children.append(_text("ocr_text", mask_sensitive_text(state["ocr_text"]),
-                                      style="body", lines=8))
-            ocr_children.append(_text("ocr_text_note", "识别原文中的长数字已脱敏展示，明文仅加密留存于本机",
-                                      style="caption"))
-        parsed = state.get("ocr_parsed") or {}
-        if parsed:
-            rows = []
-            for key, value in parsed.items():
-                label = SENSITIVE_LABELS.get(key, key)
-                if key == "number_full":
-                    value = mask_number(value)
-                rows.append({"label": label, "value": value})
-            ocr_children.append({"type": "card", "id": "ocr_parsed",
-                                 "props": {"title": "识别到的字段"}, "children": [
-                                     _text("ocr_parsed_%s" % item["label"], "%s：%s" % (item["label"], item["value"]),
-                                           style="caption")
-                                     for item in rows]})
-        if state.get("ocr_error"):
-            ocr_children.append(_text("ocr_error", state["ocr_error"], style="caption"))
-        ocr_children.append({
-            "type": "container", "id": "ocr_actions",
-            "props": {"direction": "horizontal", "gap": 8},
-            "children": [_button("btn_ocr_pick", "选择图片 / PDF", "ocr_pick", style="primary"),
-                         _button("btn_ocr_save", "存入 Vault", "ocr_save"),
-                         _button("btn_close_ocr", "关闭", "close_ocr")],
-        })
-        children.append({"type": "overlay", "id": "ocr_sheet",
-                         "props": {"kind": "sheet", "title": "OCR 录入", "height": 520},
-                         "children": ocr_children})
-
-    # ---- 详情弹层 ----
-    if state.get("detail_open"):
-        detail_children = [
-            _text("detail_title", state.get("detail_title", ""), style="heading"),
-            _text("detail_meta", state.get("detail_meta", ""), style="caption"),
-        ]
-        if state.get("detail_rows"):
-            detail_children.append({"type": "card", "id": "detail_basic",
-                                    "props": {"title": "基本信息"}, "children": [
-                                        _text("detail_row_%d" % index, "%s：%s" % (row["label"], row["value"]),
-                                              style="caption")
-                                        for index, row in enumerate(state["detail_rows"])]})
-        if state.get("detail_has_sensitive"):
-            locked_children = [_text("detail_locked_hint", "敏感字段已加密（验证后展示）", style="caption")]
-            sensitive = state.get("detail_sensitive") or {}
-            if state.get("detail_unlocked") and sensitive:
-                for name, value in sensitive.items():
-                    locked_children.append(_text("detail_sensitive_%s" % name,
-                                                 "%s：%s" % (SENSITIVE_LABELS.get(name, name), value),
-                                                 style="caption", lines=2))
-            elif state.get("detail_unlocking"):
-                locked_children.append(_text("detail_unlocking", "正在验证…", style="caption"))
-            else:
-                locked_children.append(_button("btn_unlock", "Touch ID / 密码验证后查看", "unlock",
-                                               style="primary"))
-            if state.get("detail_auth_error"):
-                locked_children.append(_text("detail_auth_error", state["detail_auth_error"], style="caption"))
-            detail_children.append({"type": "card", "id": "detail_locked",
-                                    "props": {"title": "敏感字段"}, "children": locked_children})
-        if state.get("detail_ai_summary"):
-            ai_children = [_text("detail_ai_summary", state["detail_ai_summary"], style="body", lines=6)]
-            if state.get("detail_ai_tags"):
-                ai_children.append(_text("detail_ai_tags",
-                                         "、".join("#%s" % t for t in state["detail_ai_tags"]),
-                                         style="caption"))
-            detail_children.append({"type": "card", "id": "detail_ai",
-                                    "props": {"title": "AI 摘要"}, "children": ai_children})
-        detail_children.append({
-            "type": "container", "id": "detail_actions",
-            "props": {"direction": "horizontal", "gap": 8},
-            "children": [_button("btn_delete", "删除", "ask_delete"),
-                         _button("btn_close_detail", "关闭", "close_detail")],
-        })
-        children.append({"type": "overlay", "id": "detail_sheet",
-                         "props": {"kind": "sheet", "title": "资产详情", "height": 620},
-                         "children": detail_children})
-        if state.get("confirm_delete"):
-            children.append({
-                "type": "overlay", "id": "confirm_delete",
-                "props": {"kind": "dialog", "title": "删除这条记录？",
-                          "text": "将从 Vault 移除该条目及其私有文件，操作不可撤销。"},
-                "children": [_button("btn_confirm_delete", "删除", "confirm_delete", style="primary"),
-                             _button("btn_cancel_delete", "取消", "cancel_delete")],
-            })
-
-    # ---- 提示条 / 末次动作 ----
-    if state.get("banner"):
-        children.append(_text("banner", state["banner"], style="caption"))
-    children.append(_text("last_action", "最近操作：%s" % (state.get("last_action") or "-"), style="caption"))
-
-    return {"type": "container", "id": "root",
-            "props": {"direction": "vertical", "gap": 14, "padding": PADDING},
-            "children": children}
 
 
 # ---------------------------------------------------------------------------
@@ -1331,14 +1344,15 @@ def _on_open_manual(state, event):
     return open_manual(state)
 
 
-@APP.action("set_manual_kind", node_id="kind_document:身份证")
-def _on_set_manual_kind(state, event):
-    node_id = event.get("node_id") or ""
+@APP.action("manual_kind_change", node_id="manual_kind_form", event="change")
+def _on_manual_kind_change(state, event):
+    """录入类型 picker（声明式）：值取中文标签，反查回 kind 口令。"""
     payload = event.get("payload") or {}
-    kind = payload.get("value") or payload.get("kind") or ""
-    if not kind and node_id.startswith("kind_"):
-        kind = node_id[len("kind_"):]
-    return set_manual_kind(state, str(kind))
+    raw = str(payload.get("value") or payload.get("kind") or "")
+    kind = KIND_BY_LABEL.get(raw, raw)
+    if kind not in MANUAL_KINDS:
+        kind = "document:身份证"
+    return set_manual_kind(state, kind)
 
 
 @APP.action("manual_change", node_id="manual_form", event="change")
@@ -1488,9 +1502,22 @@ def _on_close_detail(state, event):
     state["detail_open"] = False
     state["confirm_delete"] = False
     state["detail_sensitive"] = {}
+    state["detail_has_sensitive"] = False
     state["detail_unlocked"] = False
     state["last_action"] = "已关闭详情"
     return state
+
+
+@APP.action("confirm_delete", node_id="confirm_delete_dialog", event="confirm")
+def _on_dialog_confirm_delete(state, event):
+    """删除确认 dialog 的内置确认键（与 btn_confirm_delete 同口径）。"""
+    return _on_confirm_delete(state, event)
+
+
+@APP.action("cancel_delete", node_id="confirm_delete_dialog", event="cancel")
+def _on_dialog_cancel_delete(state, event):
+    """删除确认 dialog 的内置取消键（与 btn_cancel_delete 同口径）。"""
+    return _on_cancel_delete(state, event)
 
 
 APP._on_capability_result = _on_capability_result
@@ -1503,6 +1530,8 @@ def _startup_checks():
     APP.state.update(fresh)
     _stderr("[vault] 预载完成：vault_dir=%s，现有 %d 条；调用未授予的权限时将回 4309 并明确提示"
             % (STORE.root, STORE.count()))
+    _stderr("[vault] UI 声明：%s%s" % ("ui/main.json 已载入" if isinstance(UI_BASE, dict) else "回退内置骨架",
+                                       ("；" + UI_LOAD_NOTE) if UI_LOAD_NOTE else ""))
 
 
 def _stderr(text):
