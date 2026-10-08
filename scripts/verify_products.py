@@ -38,9 +38,12 @@ PRODUCTS_DIR = VAULT_ROOT / "products"
 INDEX_PATH = VAULT_ROOT / "index.json"
 
 MANIFEST_REQUIRED = {
-    "schema", "id", "name", "title", "version", "author",
+    "schema", "name", "title", "version", "author",
     "summary", "kind", "download_url", "sha256",
 }
+# 身份键按 schema 分流（契约 §3.3 / §3.4）：v1 顶层 `id`；v2 改 `brick_id`
+IDENTITY_KEY_V1 = "id"
+IDENTITY_KEY_V2 = "brick_id"
 INDEX_ALIGN_FIELDS = ("name", "version", "kind", "download_url", "sha256")
 # 包内 manifest 必须与仓库 manifest 逐字一致的字段（安装器据此确认身份/入口/权限）
 ZIP_MANIFEST_FIELDS = ("schema", "id", "name", "title", "version", "kind", "bundle", "permissions",
@@ -322,7 +325,8 @@ def verify_product(pdir: Path, index: dict) -> list:
         errs.append(f"manifest.json 解析失败：{e}")
         return errs
 
-    for f in MANIFEST_REQUIRED:
+    identity_key = IDENTITY_KEY_V2 if m.get("schema") == SCHEMA_V2 else IDENTITY_KEY_V1
+    for f in sorted(set(MANIFEST_REQUIRED) | {identity_key}):
         if f not in m or m[f] in (None, ""):
             errs.append(f"manifest.json 缺少必填字段：{f}")
 
@@ -330,8 +334,9 @@ def verify_product(pdir: Path, index: dict) -> list:
         errs.append(f"name 与目录名不一致：manifest={m.get('name')!r}，目录={mid!r}")
     if m.get("kind") != "product":
         errs.append(f"kind 必须为 product，当前：{m.get('kind')!r}")
-    if not str(m.get("id", "")).startswith("com.shadeling.brick."):
-        errs.append(f"id 非法：{m.get('id')!r}（应以 com.shadeling.brick. 开头）")
+    raw_id = m.get(identity_key, "")
+    if not str(raw_id).startswith("com.shadeling.brick."):
+        errs.append(f"{identity_key} 非法：{raw_id!r}（应以 com.shadeling.brick. 开头）")
 
     ver = m.get("version", "")
     rel = pdir / "releases" / ver

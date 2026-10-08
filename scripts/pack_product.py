@@ -25,6 +25,7 @@ import argparse
 import hashlib
 import json
 import sys
+import time
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -37,7 +38,17 @@ INDEX_PATH = VAULT_ROOT / "index.json"
 RELEASE_META_FIELDS = ("sha256", "download_url")
 
 # 包内 manifest 与仓库 manifest 必须逐字一致的字段
-IDENTITY_FIELDS = ("schema", "id", "name", "title", "version", "kind", "bundle", "permissions")
+# - v1（bundle 形态）：顶层 bundle + id
+# - v2 声明式（契约 §3.3 / §3.6-1）：无 bundle / id，改 brick_id + nav / ui / logic 三段
+IDENTITY_FIELDS_V1 = ("schema", "id", "name", "title", "version", "kind", "bundle", "permissions")
+IDENTITY_FIELDS_V2 = ("schema", "brick_id", "name", "title", "version", "kind",
+                      "permissions", "nav", "ui", "logic")
+SCHEMA_V2 = "brick-app/v2"
+
+
+def identity_fields(m: dict) -> tuple:
+    """按 schema 分流身份字段集合（v2 声明式与服务端/宿主判据同源）。"""
+    return IDENTITY_FIELDS_V2 if m.get("schema") == SCHEMA_V2 else IDENTITY_FIELDS_V1
 
 
 class PackError(ValueError):
@@ -84,7 +95,8 @@ def _release_paths(product: str, version: str):
 def stage(product: str, out: Path) -> None:
     """把仓库 manifest 的身份字段暂存到 out（剥掉仓库侧发布元数据）。"""
     m = _read_json(_manifest_path(product))
-    missing = [f for f in IDENTITY_FIELDS if not m.get(f) and f != "permissions"]
+    fields = identity_fields(m)
+    missing = [f for f in fields if not m.get(f) and f != "permissions"]
     if missing:
         raise PackError(f"manifest 缺必填字段：{', '.join(missing)}")
     if m.get("kind") != "product":
@@ -101,27 +113,101 @@ def stage(product: str, out: Path) -> None:
 
 
 def _check_zip(zip_path: Path, m: dict, product: str) -> None:
-    """复核 zip：必须含 manifest.json + 入口 bundle，且身份字段与仓库 manifest 一致。"""
+    """复核 zip：必须含 manifest.json + 入口，且身份字段与仓库 manifest 一致。
+
+    - v1（bundle 形态）：要求 zip 内含入口 `.app` 目录（与旧口径逐字一致）；
+    - v2 声明式（`brick-app/v2`）：无 bundle，改校验 `ui.entry` / `logic.entry` 在包内
+      （与宿主 `BrickManifestV2.checkEntry`、发布闸门 `verify_ui_entry` /
+      `verify_logic_entry` 判据同源，§3.3 / §3.6-7）。
+    """
+    is_v2 = m.get("schema") == SCHEMA_V2
     with zipfile.ZipFile(zip_path) as zf:
         names = zf.namelist()
         if "manifest.json" not in names:
             raise PackError(
                 f"zip 内缺 manifest.json：{zip_path.name}（安装器会拒绝安装，闸门拦住不出包）")
-        roots = {n.split("/", 1)[0] for n in names}
-        bundle = m.get("bundle", "")
-        if bundle and bundle not in roots:
-            raise PackError(f"zip 内缺入口 bundle：{bundle}")
+        if is_v2:
+            ui = m.get("ui") if isinstance(m.get("ui"), dict) else {}
+            logic = m.get("logic") if isinstance(m.get("logic"), dict) else {}
+            for label, rel in (("ui.entry", ui.get("entry")), ("logic.entry", logic.get("entry"))):
+                if not rel:
+                    raise PackError(f"v2 manifest 缺 {label}（契约 §3.3）")
+                if str(rel).startswith("/") or ".." in Path(str(rel)).parts:
+                    raise PackError(f"{label} 路径非法（禁止绝对路径与 `..` 逃逸）：{rel!r}")
+                if rel not in names:
+                    raise PackError(f"zip 内缺 {label}：{rel}（安装器会拒装）")
+        else:
+            bundle = m.get("bundle", "")
+            if bundle and bundle not in {n.split("/", 1)[0] for n in names}:
+                raise PackError(f"zip 内缺入口 bundle：{bundle}")
         try:
             inner = json.loads(zf.read("manifest.json").decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             raise PackError(f"zip 内 manifest.json 解析失败：{e}") from e
 
-    for f in IDENTITY_FIELDS:
+    for f in identity_fields(m):
         if inner.get(f) != m.get(f):
             raise PackError(f"zip 内 manifest 与仓库 manifest 不一致：{f}="
                             f"{inner.get(f)!r} vs {m.get(f)!r}")
     if inner.get("sha256"):
         raise PackError("zip 内 manifest 不应携带 sha256（zip 无法包含自身哈希）")
+
+
+def pack(product: str, version: str, out: Path | None = None) -> None:
+    """v2 声明式产品出包：zip 根 = manifest.json + ui/ + logic/（无 `.app` bundle）。
+
+    与 v1 的 `source/package_app.sh` 并列：v2 不再有 bundle，宿主安装器按 `ui.entry` /
+    `logic.entry` 在包内落位（契约 §3.3 / §3.5）。排除 `__pycache__` / `.pyc` / `.DS_Store`；
+    `logic.entry` 以可执行位（0755）入包，兼容宿主 `runtime=executable` 与 `python3` 两种口径。
+    """
+    m = _read_json(_manifest_path(product))
+    if m.get("schema") != SCHEMA_V2:
+        raise PackError(f"{product} 不是 {SCHEMA_V2}（v1 形态请走 source/package_app.sh）")
+    if m.get("version") != version:
+        raise PackError(f"版本不一致：manifest.version={m.get('version')!r}，出包版本={version!r}")
+
+    pdir = PRODUCTS_DIR / product
+    ui = m.get("ui") if isinstance(m.get("ui"), dict) else {}
+    logic = m.get("logic") if isinstance(m.get("logic"), dict) else {}
+    sections = (("ui", ui.get("entry")), ("logic", logic.get("entry")))
+    for label, rel in sections:
+        if not rel:
+            raise PackError(f"v2 manifest 缺 {label}.entry（契约 §3.3）")
+
+    if out is None:
+        _, out, _ = _release_paths(product, version)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    skip_dirs = {"__pycache__", ".git"}
+    skip_files = {".DS_Store"}
+    inner = {k: v for k, v in m.items() if k not in RELEASE_META_FIELDS}
+
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json",
+                    json.dumps(inner, ensure_ascii=False, indent=2) + "\n")
+        for label, rel in sections:
+            src = pdir / rel
+            if src.is_file():
+                targets = [(src, str(rel))]
+            elif src.is_dir():
+                targets = [(f, f.relative_to(pdir).as_posix()) for f in sorted(src.rglob("*"))
+                           if f.is_file()
+                           and not any(part in skip_dirs for part in f.relative_to(pdir).parts)
+                           and f.name not in skip_files]
+            else:
+                raise PackError(f"{label}.entry 在仓库内不存在：{src}")
+            if not targets:
+                raise PackError(f"{label}.entry 无可打包文件：{rel}")
+            for f, arc in targets:
+                mode = 0o755 if arc == logic.get("entry") else 0o644
+                info = zipfile.ZipInfo(arc, date_time=time.localtime(f.stat().st_mtime)[:6])
+                info.external_attr = mode << 16
+                info.compress_type = zipfile.ZIP_DEFLATED
+                zf.writestr(info, f.read_bytes())
+
+    print(f"[pack] 已出包：{_rel(out)}")
+    for label, rel in sections:
+        print(f"       段 {label}：{rel}")
 
 
 def finalize(product: str, version: str) -> None:
@@ -177,10 +263,18 @@ def main(argv=None) -> int:
     pf.add_argument("--product", required=True)
     pf.add_argument("--version", required=True)
 
+    pp = sub.add_parser("pack", help="v2 声明式产品出包（manifest.json + ui/ + logic/）")
+    pp.add_argument("--product", required=True)
+    pp.add_argument("--version", required=True)
+    pp.add_argument("--out", type=Path, default=None,
+                    help="输出 zip 路径（默认落 releases/<version>/）")
+
     args = p.parse_args(argv)
     try:
         if args.cmd == "stage":
             stage(args.product, args.out)
+        elif args.cmd == "pack":
+            pack(args.product, args.version, args.out)
         else:
             finalize(args.product, args.version)
     except PackError as e:
