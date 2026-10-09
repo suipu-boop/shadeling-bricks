@@ -6,6 +6,7 @@
 不触碰真实 products/ 与 index.json。
 """
 import hashlib
+import plistlib
 import json
 import sys
 import tempfile
@@ -69,7 +70,8 @@ class PackProductTest(unittest.TestCase):
         zip_path = rel / f"{name}-{version}.zip"
         m = json.loads((self.products / name / "manifest.json").read_text(encoding="utf-8"))
         with zipfile.ZipFile(zip_path, "w") as zf:
-            zf.writestr("Demo.app/Contents/Info.plist", "<plist/>")
+            zf.writestr("Demo.app/Contents/Info.plist",
+                        plistlib.dumps({"CFBundleShortVersionString": m.get("version", "")}).decode("utf-8"))
             if with_manifest:
                 zf.writestr("manifest.json", json.dumps(zip_manifest(m), ensure_ascii=False))
         return zip_path

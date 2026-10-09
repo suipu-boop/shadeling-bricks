@@ -6,6 +6,7 @@
 不触碰真实 products/ 与 index.json。
 """
 import hashlib
+import plistlib
 import json
 import sys
 import tempfile
@@ -14,6 +15,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+PLIST_VERSION_KEY = "CFBundleShortVersionString"  # 与 verify_products 同源
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from verify_products import (  # noqa: E402
@@ -52,7 +54,10 @@ def zip_manifest(manifest):
 def write_product_zip(zip_path, manifest, with_manifest=True, with_bundle=True):
     with zipfile.ZipFile(zip_path, "w") as zf:
         if with_bundle:
-            zf.writestr("Demo.app/Contents/Info.plist", "<plist/>")
+            # E1.1 版本一致性闸门：包内 Info.plist 须携带与 manifest.version 一致的
+            # CFBundleShortVersionString（历史坑见 verify_version_consistency 注释）
+            zf.writestr("Demo.app/Contents/Info.plist",
+                        plistlib.dumps({PLIST_VERSION_KEY: manifest.get("version", "")}).decode("utf-8"))
         if with_manifest:
             zf.writestr("manifest.json", json.dumps(zip_manifest(manifest), ensure_ascii=False))
 
@@ -108,7 +113,7 @@ def make_v2_manifest(name="demo", version="1.0.0", ui_entry="ui/main.json",
         logic["signature"] = logic_signature
     m = {
         "schema": "brick-app/v2",
-        "id": f"com.shadeling.brick.{name}",
+        "brick_id": f"com.shadeling.brick.{name}",
         "name": name,
         "title": "Demo V2",
         "version": version,
@@ -150,6 +155,11 @@ def make_v2_product(vault: Path, name="demo", version="1.0.0", manifest=None,
         if inner_manifest:
             zf.writestr("manifest.json",
                         json.dumps(zip_manifest(manifest), ensure_ascii=False))
+    # 仓库侧 logic.entry 落位（verify_logic_entry_local / verify_logic_hash_local 口径）
+    if m_logic.get("entry") and logic_bytes is not None:
+        repo_logic = pdir / str(m_logic["entry"])
+        repo_logic.parent.mkdir(parents=True, exist_ok=True)
+        repo_logic.write_bytes(logic_bytes)
     manifest["sha256"] = hashlib.sha256(zip_path.read_bytes()).hexdigest()
     (pdir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False),
                                         encoding="utf-8")
@@ -428,13 +438,13 @@ class VerifyProductsTest(unittest.TestCase):
 
     def test_v2_overlay_node_accepted(self):
         doc = ui_doc({"type": "container", "id": "root", "children": [
-            {"type": "overlay", "id": "confirm", "subtype": "dialog",
-             "props": {"title": "确认", "message": "删除？"}}]})
+            {"type": "overlay", "id": "confirm",
+             "props": {"kind": "dialog", "title": "确认", "message": "删除？"}}]})
         self.assertEqual(verify_ui_document(doc), [])
 
     def test_v2_overlay_bad_subtype(self):
         doc = ui_doc({"type": "container", "id": "root", "children": [
-            {"type": "overlay", "id": "confirm", "subtype": "popover"}]})
+            {"type": "overlay", "id": "confirm", "props": {"kind": "popover"}}]})
         self.assertTrue(any("overlay 节点子类型非法" in e for e in verify_ui_document(doc)))
 
     def test_v2_bare_overlay_entry_fails_in_product(self):
