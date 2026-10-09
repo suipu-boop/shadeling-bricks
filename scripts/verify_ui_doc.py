@@ -9,6 +9,8 @@
   - ``app/Sources/BrickRenderer/UIDocument.swift``：组件类型 / props 键白名单 / 事件面 / 图标白名单
   - ``app/Sources/BrickRenderer/UIDocumentValidator.swift``：id 文法 / 枚举值域 / 取值区间 / 叶子 children 规则
   - ``app/Sources/BrickRenderer/Interpolation.swift``：插值语法与格式化器白名单
+  - ``app/Sources/BrickRenderer/TokenMap.swift``：颜色 10 / 字号 5 / 间距 5 / 圆角 3 令牌表
+    （表外名 → 令牌解析 nil → 整帧 4303；本文件固化同一张表，``--token-source`` 可做同源比对）
 
 用法::
 
@@ -23,6 +25,7 @@ import argparse
 import json
 import re
 import sys
+from pathlib import Path
 
 # --- 限额（对齐 BrickUIDocumentLimits.default 与校验器常量）---
 MAX_NODES = 2000
@@ -122,6 +125,21 @@ ICON_WHITELIST = {
 }
 
 
+# --- 令牌表（对齐 BrickTokenMap，来源 app/Sources/BrickRenderer/TokenMap.swift）---
+# 口径：表外名解析为 nil → 整帧 4303。此前离线校验器只打「不查令牌表」的提示，
+# 于是「错误令牌名」能出包、装机才炸；此处固化同源表，失败前移（打包闸门
+# pack_product._gate_ui_document 直接复用本模块，出包即拒）。
+TOKEN_NAMES = {
+    "color": ("text.primary", "text.secondary", "surface.base", "surface.card", "surface.inset",
+              "accent", "danger", "warning", "success", "border"),
+    "fontSize": ("font.title", "font.heading", "font.body", "font.caption", "font.label"),
+    "spacing": ("space.xs", "space.sm", "space.md", "space.lg", "space.xl"),
+    "radius": ("radius.sm", "radius.md", "radius.lg"),
+}
+# 跨仓同源比对默认位置（不存在即跳过，不阻断离线校验）
+DEFAULT_TOKEN_SOURCE = Path.home() / "Dev" / "Shadeling" / "app" / "Sources" / "BrickRenderer" / "TokenMap.swift"
+
+
 class Issues(object):
     def __init__(self):
         self.items = []
@@ -187,14 +205,25 @@ def _check_truncate(value, path, issues):
     issues.add(path, "必须是 %s（布尔为 legacy 兼容）：`%s`" % (" / ".join(ENUMS["text_truncate"]), value))
 
 
+def _check_token(value, kind, path, issues):
+    """令牌表硬校验（对齐 BrickTokenMap.<kind>Names）：表外名即拒（装机期 4303）。
+
+    非字符串（含布尔）同样报错——令牌位只接受表内字符串或（间距位）具体数字。
+    """
+    if value is None:
+        return
+    allowed = TOKEN_NAMES[kind]
+    if isinstance(value, str) and value in allowed:
+        return
+    issues.add(path, "令牌不在表内（BrickTokenMap.%sNames）：`%s`（表内：%s）"
+               % (kind, value, " / ".join(allowed)))
+
+
 def _check_spacing(value, path, issues):
     if value is None:
         return
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        if isinstance(value, str):
-            issues.add(path, "间距令牌 `%s`：需与 BrickTokenMap.spacingNames 对照（离线校验器不查令牌表）" % value)
-            return
-        issues.add(path, "必须是数字（0…64）或间距令牌名")
+        _check_token(value, "spacing", path, issues)
         return
     if not 0 <= value <= 64:
         issues.add(path, "超出范围 0…64：%s" % value)
@@ -301,9 +330,7 @@ def _check_props(type_name, props, path, issues):
         _check_enum(props.get("card_style"), "card_style", path + ".card_style", issues)
         _check_spacing(props.get("gap"), path + ".gap", issues)
         _check_spacing(props.get("padding"), path + ".padding", issues)
-        if props.get("background") is not None:
-            issues.add(path + ".background", "颜色令牌 `%s`：需与 BrickTokenMap.colorNames 对照（离线校验器不查令牌表）"
-                       % props.get("background"))
+        _check_token(props.get("background"), "color", path + ".background", issues)
 
     elif type_name == "grid":
         columns, minimum = props.get("columns"), props.get("min_column_width")
@@ -333,6 +360,7 @@ def _check_props(type_name, props, path, issues):
                 issues.add(path + ".lines", "必须是 1…20 的整数：%s" % lines)
         _check_truncate(props.get("truncate"), path + ".truncate", issues)
         _check_bool_slot(props.get("mono"), path + ".mono", issues)
+        _check_token(props.get("color"), "color", path + ".color", issues)
 
     elif type_name == "button":
         if props.get("label") is None:
@@ -492,6 +520,7 @@ def _check_props(type_name, props, path, issues):
         else:
             _check_icon(name, path + ".name", issues)
         _check_enum(props.get("size"), "icon_size", path + ".size", issues)
+        _check_token(props.get("color"), "color", path + ".color", issues)
 
 
 def _count_nodes(root):
@@ -593,10 +622,41 @@ def verify_frame(root, issues):
     return count, depth
 
 
+def _swift_names(text, name):
+    m = re.search(r"static let %s\s*:\s*\[String\]\s*=\s*\[(.*?)\]" % name, text, re.S)
+    return tuple(re.findall(r'"([^"]+)"', m.group(1))) if m else None
+
+
+def check_token_source(path, issues):
+    """令牌表同源比对：TokenMap.swift ↔ 本文件 TOKEN_NAMES（跨仓 best-effort）。
+
+    目的：两仓令牌表各自演化会静默漂移——Swift 侧加了色、离线校验器不认，出包即拒。
+    """
+    try:
+        text = Path(path).expanduser().read_text(encoding="utf-8")
+    except OSError as e:
+        issues.add("$.token_source", "读取失败：%s" % e)
+        return False
+    ok = True
+    for kind, swift_name in (("color", "colorNames"), ("fontSize", "fontSizeNames"),
+                             ("spacing", "spacingNames"), ("radius", "radiusNames")):
+        got = _swift_names(text, swift_name)
+        if got is None:
+            issues.add("$.token_source", "Swift 侧未找到 %s（口径变更？）" % swift_name)
+            ok = False
+        elif got != TOKEN_NAMES[kind]:
+            issues.add("$.token_source", "令牌表漂移：%s Swift=%s，本地=%s"
+                       % (swift_name, list(got), list(TOKEN_NAMES[kind])))
+            ok = False
+    return ok
+
+
 def main():
     parser = argparse.ArgumentParser(description="UI 文档离线校验（与 Swift UIDocumentValidator 同规则表）")
     parser.add_argument("path", nargs="?", help="UI 文档路径（main.json）")
     parser.add_argument("--frame", metavar="FILE", help="校验单帧 root（- 表示从 stdin 读取）")
+    parser.add_argument("--token-source", metavar="FILE", default="auto",
+                        help="TokenMap.swift 路径，做令牌表同源比对（auto=默认探测 Shadeling 仓；none=跳过）")
     args = parser.parse_args()
 
     if not args.path and not args.frame:
@@ -615,6 +675,14 @@ def main():
         issues = Issues()
         count, depth = verify_document(document, issues)
         label = args.path
+
+    token_source = args.token_source
+    if token_source == "auto":
+        token_source = str(DEFAULT_TOKEN_SOURCE) if DEFAULT_TOKEN_SOURCE.exists() else None
+    elif token_source in ("none", ""):
+        token_source = None
+    if token_source:
+        check_token_source(token_source, issues)
 
     if issues:
         print("FAIL %s：%d 个问题" % (label, len(issues.items)))

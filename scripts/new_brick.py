@@ -247,4 +247,12 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    # 姊妹入口：v2 产品工程（products/<id>/）走 new_product.py——
+    # `python3 scripts/new_brick.py product <id> ...` 与直接调 new_product.py 等价，
+    # 保留一个命令面，避免两处各写一份用法说明。
+    if len(sys.argv) > 1 and sys.argv[1] == "product":
+        import new_product
+
+        print("[new_brick] 转派到 v2 产品脚手架 new_product.py（brick-app/v2）")
+        sys.exit(new_product.main(sys.argv[2:]))
     sys.exit(main())

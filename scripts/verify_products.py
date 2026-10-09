@@ -43,6 +43,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import plistlib
 import re
 import sys
@@ -304,6 +305,78 @@ def verify_logic_entry(zf: zipfile.ZipFile, m: dict) -> list:
     if signature and not str(signature).startswith(SIGNATURE_PREFIX):
         errs.append(f"logic.signature 格式非法（须以 {SIGNATURE_PREFIX} 开头）：{str(signature)[:32]!r}…")
     return errs
+
+
+THEMES = ("brick-light", "brick-dark")
+UI_THEME_DEFAULT = "brick-light"
+
+
+def verify_ui_theme(m: dict) -> list:
+    """闸门：`ui.theme` 只接受契约枚举（§3.3；缺省 = brick-light，缺省即跟随底座由底座裁决）。
+
+    背景：宿主 BrickInstallGate 有字段级校验，但仓库侧此前不查 theme——「外观名写错」
+    能一路出包、装机才拒；本闸门与 verify_required_sections 同层，脚手架生成即自检。
+    """
+    if m.get("schema") != SCHEMA_V2:
+        return []
+    ui = m.get("ui")
+    if not isinstance(ui, dict):
+        return []  # 缺段由 verify_required_sections 报出，此处不重复
+    theme = ui.get("theme")
+    if theme is None:
+        return []
+    if theme not in THEMES:
+        return [f"ui.theme 取值非法：{theme!r}（白名单：{' / '.join(THEMES)}；"
+                f"缺省为 {UI_THEME_DEFAULT}，§3.3）"]
+    return []
+
+
+def verify_logic_entry_local(pdir: Path, m: dict) -> list:
+    """闸门：v2 产品在**仓库内**必须有 `logic.entry` 落位，且入口文件可执行。
+
+    与 zip 侧 `verify_logic_entry` 同口径，只是把失败点前移到仓库（脚手架自检复用）。
+    """
+    if m.get("schema") != SCHEMA_V2:
+        return []
+    logic = m.get("logic")
+    if not isinstance(logic, dict):
+        return []
+    entry = logic.get("entry")
+    if not entry:
+        return ["logic.entry 缺失（契约 §3.3）"]
+    rel = str(entry)
+    if rel.startswith("/") or ".." in Path(rel).parts:
+        return [f"logic.entry 路径非法（禁止绝对路径与 `..` 逃逸）：{rel!r}"]
+    src = pdir / rel
+    if not src.exists():
+        return [f"logic.entry 在仓库内不存在：{rel}"]
+    # 注：仓库内源文件不强制 +x——zip 内 0755 由 pack_product 统一设置，
+    # 此处若一并要求，会对既有产物（vault / wechat-mp 均为 644）制造假阳性。
+    return []
+
+
+def verify_logic_hash_local(pdir: Path, m: dict) -> list:
+    """闸门：仓库内 logic.entry 的 sha256 与 manifest.logic.sha256 一致（zip 判据③前移）。
+
+    背景：logic.sha256 是发布闸门的必登记项（§3.6-7），但「改了 stub 忘了重算」要到
+    出包才暴露；此处把比对放到仓库侧，改完立刻能发现。
+    """
+    if m.get("schema") != SCHEMA_V2:
+        return []
+    logic = m.get("logic")
+    if not isinstance(logic, dict):
+        return []
+    entry, digest = logic.get("entry"), logic.get("sha256")
+    if not entry or not digest:
+        return []  # 缺登记由 zip 侧判据③报出，此处只查一致性
+    src = pdir / str(entry)
+    if not src.is_file():
+        return []
+    actual = hashlib.sha256(src.read_bytes()).hexdigest()
+    if actual != str(digest).lower():
+        return [f"logic.entry 哈希与 manifest 不一致：manifest={digest}，实际={actual}；"
+                f"改过逻辑请重算 —— python3 scripts/new_product.py {m.get('name')} --rehash"]
+    return []
 
 
 def verify_required_sections(m: dict) -> list:
@@ -570,6 +643,9 @@ def verify_product(pdir: Path, index: dict) -> list:
         errs.append(f"kind 必须为 product，当前：{m.get('kind')!r}")
     errs.extend(verify_permission_risks(m))
     errs.extend(verify_source_gates(pdir, m))
+    errs.extend(verify_ui_theme(m))
+    errs.extend(verify_logic_entry_local(pdir, m))
+    errs.extend(verify_logic_hash_local(pdir, m))
     raw_id = m.get(identity_key, "")
     if not str(raw_id).startswith("com.shadeling.brick."):
         errs.append(f"{identity_key} 非法：{raw_id!r}（应以 com.shadeling.brick. 开头）")
