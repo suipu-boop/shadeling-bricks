@@ -235,6 +235,8 @@ AIGC:
 - **样式只允许引用令牌**：颜色 / 字号 / 间距 / 圆角 / 阴影一律使用令牌名（如 `text.primary`、`surface.card`、`space.md`、`radius.md`），不接受自由色值、字号数值、渐变。
 - **三级前景降级口径（E1 前置 T2，2026-10-08）**：颜色令牌表不含 `text.tertiary`；原设计的第三级前景（列表 meta、次要说明等）一律降级为 `text.secondary`，不新增令牌（`surface.inset` 是背景色，不可用于前景）。
 - **布局原语**：`container(direction/gap/padding/align/size)`、`grid(columns/min_column_width/gap)`、`scroll(axis)`、`spacer`；尺寸取值 `hug` / `fill` / 数值 pt。
+- **视觉承载口径（2026-10-09 owner 拍板）**：颜色 / 字号 / 间距 / 圆角令牌维持既有 `10 / 5 / 5 / 3` 结构不变，**材质与强调按钮样式不在令牌表新增条目**，改由 `BrickUIKit` 的 `BrickMaterial` 封装承载：毛玻璃表面统一走 `.brickGlassSurface(...)`（材质 `BrickMaterial.glass` / `.bar` + `glassTint` / `sidebarTint` / `glassTintStrong` / `overlayStroke` 叠色），强调按钮的四态不透明度 / 内边距 / 圆角统一引用 `BrickMaterial.Accent`。调用点禁止裸用 `.ultraThinMaterial` 等系统材质或就地写按钮数值。
+- **三级前景口径追认（2026-10-09）**：确认**不新增** `text.tertiary`，第三级前景维持按 `text.secondary` 降级（2026-10-08 口径不变）。
 - **禁止项**：绝对定位、z-index 叠层、自定义绘制、动画时间线、变换矩阵。
 
 ## 2.4 数据绑定与事件
@@ -518,7 +520,7 @@ AIGC:
 |---|---|---|---|---|---|
 | `engine` | string | 是 | — | UI 引擎版本，固定 `shadeling-ui/1` | 不在支持列表 → 拒绝并提示升级 |
 | `entry` | string | 是 | — | 首帧 UI 文档路径（包内相对） | 存在性校验；禁止绝对路径、`../`、符号链接逃逸 |
-| `theme` | string | 否 | `brick-light` | 主题令牌集 | 枚举：`brick-light` / `brick-dark`（跟随系统时由底座裁决） |
+| `theme` | string | 否 | `brick-light` | 主题令牌集 | 枚举：`brick-light` / `brick-dark`；**未声明时不跟随系统外观**，由底座锁定值 `brick-light` 裁决（2026-10-09 owner 拍板，`ui.theme` 锁定 `brick-light`、不跟随系统深色） |
 
 ### 逻辑入口段 `logic`
 
