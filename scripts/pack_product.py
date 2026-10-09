@@ -184,7 +184,8 @@ def pack(product: str, version: str, out: Path | None = None) -> None:
 
     与 v1 的 `source/package_app.sh` 并列：v2 不再有 bundle，宿主安装器按 `ui.entry` /
     `logic.entry` 在包内落位（契约 §3.3 / §3.5）。排除 `__pycache__` / `.pyc` / `.DS_Store`；
-    `logic.entry` 以可执行位（0755）入包，兼容宿主 `runtime=executable` 与 `python3` 两种口径。
+    `logic.entry` 以可执行位（0755）入包，兼容宿主 `runtime=executable` / `python3` / `node` 三种口径
+    （后两者执行位非必需，统一 0755 不影响：底座以 `[解释器, entry]` 启动，入口只需可读）。
     """
     m = _read_json(_manifest_path(product))
     if m.get("schema") != SCHEMA_V2:
