@@ -23,6 +23,14 @@ products/<id>/ 发布前强制自检：
 8. **权限段台账闸门（E1.1）**：`manifest.permission_risks`（若声明）须与 `permissions` 双向一致：
    declared 项必须在 `permissions` 内，pending / resolved 项必须在 `permissions` 外，
    且 `level ∈ {low, mid, high, app-level}`、`status ∈ {declared, pending, resolved}`
+9. **模板 Phase 3 源码闸门**（规格 `specs/积木规范化模板-v0.1.md` §Phase 3）：
+   对声明式（`brick-app/v2`）产品的 `source/` 源码做三项静态检查——
+   `source/Package.swift` 必须含 BrickUIKit 依赖；业务源码禁颜色字面量
+   （`Color(red:` / `NSColor(red:` / `#colorLiteral(` / `Color(hex: …)` / `Color("#rrggbb")`；
+   BrickUIKit 自身不在本仓、不扫）；业务源码禁裸弹层 `.alert(` / `.sheet(` /
+   `.confirmationDialog(`（须走 `brick*` 封装）。
+   既存产物不误伤：`SOURCE_GATE_EXEMPT` 登记的历史遗留违规项只记录（`[warn]`）不判错，
+   待该源码下次改动时收敛；无 `source/` 或无 `Package.swift` 的形态按分流跳过。
 
 契约权威：specs/brick-market-v2.md（brick-app/v1 manifest）、
 specs/Shadeling积木声明式UI架构设计与契约-v0.1.md §2 / §3.6 / §7.4
@@ -85,6 +93,33 @@ ALLOWED_LOGIC_ENV_KEYS: frozenset = frozenset()
 PLIST_VERSION_KEY = "CFBundleShortVersionString"    # 与 manifest.version 对齐的 plist 键
 RISK_LEVELS = ("low", "mid", "high", "app-level")   # 级别口径同宿主 BrickPermission.level
 RISK_STATUSES = ("declared", "pending", "resolved")  # 落地状态：已声明 / 待落地 / 核查后无需声明
+
+# —— 模板 Phase 3 源码闸门（规格 v0.1 §Phase 3 / §Phase 4 第 4 条）——
+# 适用形态：声明式（brick-app/v2）产品 + 仓库内存在 source/ 源码目录；v1（bundle 形态）
+# 按 §3.5 兼容期不适用；纯声明式（无源码）按形态分流跳过。BrickUIKit 依赖走跨仓相对路径，
+# 不在本仓、不属于产品业务源码，因此颜色字面量白名单即"只扫产品自身 Sources"。
+SOURCE_REQUIRED_DEP = "BrickUIKit"
+# 颜色字面量（业务源码禁止直接构造颜色，须走 BrickUIKit Design.ColorPalette 令牌）
+COLOR_LITERAL_RES = (
+    ("Color(red:", re.compile(r"\bColor\s*\(\s*red\s*:")),
+    ("NSColor(red:", re.compile(r"\bNSColor\s*\(\s*red\s*:")),
+    ("#colorLiteral(", re.compile(r"#colorLiteral\s*\(")),
+    ("Color(hex:)/NSColor(hex:)", re.compile(r"\b(?:Color|NSColor)\s*\(\s*hex\s*:")),
+    ('Color("#rrggbb")', re.compile(r"\b(?:Color|NSColor)\s*\(\s*\"#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})\"")),
+)
+# 裸弹层调用（须走 brick* 封装：.brickSheet / .brickAlert / .brickConfirm）
+BARE_PRESENTATION_RE = re.compile(r"\.(alert|sheet|confirmationDialog)\s*\(")
+# 源码闸门豁免台账（只记录不误伤既有产物）：产品 → 规则键集合（空集 = 全量判错）。
+# 用途：早期源码早于模板收敛，拿新规则回溯追责会让历史产物"天生不合规"；此处登记为
+# 待收敛项，闸门对其打印 [warn] 但不计入错误，待该源码下次改动时随模板一并收敛。
+SOURCE_GATE_EXEMPT: dict = {
+    "vault": {
+        "rules": {"color_literal"},
+        "warn": "[源码闸门·豁免] VaultStyle.swift 仍含 Color(red:) 颜色字面量"
+                "（模板 Phase 3 收敛前遗留），登记为待收敛项：只记录不计错，"
+                "待 vault 源码下次改动时改用 BrickUIKit Design.ColorPalette",
+    },
+}
 
 
 class VerifyError(ValueError):
@@ -434,6 +469,82 @@ def verify_permission_risks(m: dict) -> list:
     return errs
 
 
+def _product_swift_sources(pdir: Path) -> list:
+    """产品自身业务源码：`source/**/*.swift`，排除 `.build` 构建产物与 `Package.swift`。
+
+    BrickUIKit 走跨仓相对路径依赖、不在本仓，天然落在扫描范围外（= 规格里"白名单：
+    BrickUIKit 自身"的落地方式）。
+    """
+    out = []
+    for f in sorted((pdir / "source").rglob("*.swift")):
+        if ".build" in f.parts or f.name == "Package.swift":
+            continue
+        out.append(f)
+    return out
+
+
+def verify_source_gates(pdir: Path, m: dict) -> list:
+    """闸门（模板 Phase 3 / 规格 v0.1 §Phase 3）：声明式产品 source 侧三项源码静态检查。
+
+    ① `source/Package.swift` 必须含 BrickUIKit 依赖；② 业务源码禁颜色字面量；
+    ③ 业务源码禁裸弹层 `.alert(` / `.sheet(` / `.confirmationDialog(`（须走 `brick*` 封装）。
+
+    形态分流：仅 `brick-app/v2` 且仓库内存在 `source/` 的产品适用；v1 按 §3.5 兼容期跳过，
+    无源码的纯声明式产品跳过。既存产物不误伤：`pdir.name` 在 SOURCE_GATE_EXEMPT 登记的
+    规则，命中时只打印 `[warn]` 记录、不计入错误，避免拿新规则回溯追责历史产物。
+    """
+    if m.get("schema") != SCHEMA_V2:
+        return []  # v1（bundle 形态）在兼容期（§3.5）不适用本组检查
+    pid = pdir.name
+    src_dir = pdir / "source"
+    if not src_dir.is_dir():
+        print(f"[skip] {pid}：无 source/ 源码目录（纯声明式形态），源码闸门不适用")
+        return []
+
+    errs = []
+    pkg = src_dir / "Package.swift"
+    if not pkg.exists():
+        errs.append("源码闸门：source/Package.swift 缺失（模板 Phase 3：产品工程须携带 SPM 清单）")
+    else:
+        text = pkg.read_text(encoding="utf-8", errors="replace")
+        if SOURCE_REQUIRED_DEP not in text:
+            errs.append(f"源码闸门：source/Package.swift 未含 {SOURCE_REQUIRED_DEP} 依赖"
+                        f"（模板 Phase 3 第 1 条：产品必须依赖 BrickUIKit）")
+
+    exempt = (SOURCE_GATE_EXEMPT.get(pid) or {}).get("rules") or set()
+    violations = []  # (rule, 位置, 说明)
+    for f in _product_swift_sources(pdir):
+        try:
+            lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError as e:
+            errs.append(f"源码闸门：源码读取失败 {f.relative_to(VAULT_ROOT)}（{e}）")
+            continue
+        rel = f.relative_to(VAULT_ROOT).as_posix()
+        for i, line in enumerate(lines, 1):
+            for label, pat in COLOR_LITERAL_RES:
+                if pat.search(line):
+                    violations.append(
+                        ("color_literal", f"{rel}:{i}",
+                         f"颜色字面量 {label}（须走 BrickUIKit Design.ColorPalette 令牌）"))
+            if BARE_PRESENTATION_RE.search(line):
+                violations.append(
+                    ("bare_presentation", f"{rel}:{i}",
+                     "裸弹层调用（须走 brick* 封装：.brickSheet / .brickAlert / .brickConfirm）"))
+
+    exempted = False
+    for rule, where, why in violations:
+        if rule in exempt:
+            exempted = True
+            print(f"[warn] {pid} 源码闸门·豁免：{where} {why}")
+        else:
+            errs.append(f"源码闸门：{where} {why}")
+    if exempted:
+        note = (SOURCE_GATE_EXEMPT.get(pid) or {}).get("warn")
+        if note:
+            print(f"[warn] {pid} {note}")
+    return errs
+
+
 def verify_product(pdir: Path, index: dict) -> list:
     errs = []
     mid = pdir.name
@@ -457,6 +568,7 @@ def verify_product(pdir: Path, index: dict) -> list:
     if m.get("kind") != "product":
         errs.append(f"kind 必须为 product，当前：{m.get('kind')!r}")
     errs.extend(verify_permission_risks(m))
+    errs.extend(verify_source_gates(pdir, m))
     raw_id = m.get(identity_key, "")
     if not str(raw_id).startswith("com.shadeling.brick."):
         errs.append(f"{identity_key} 非法：{raw_id!r}（应以 com.shadeling.brick. 开头）")
