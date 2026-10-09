@@ -30,6 +30,9 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import verify_ui_doc  # noqa: E402  # 打包闸门：装机期同源规则表（避免装机才炸 4303）
+
 VAULT_ROOT = Path(__file__).resolve().parent.parent
 PRODUCTS_DIR = VAULT_ROOT / "products"
 INDEX_PATH = VAULT_ROOT / "index.json"
@@ -153,6 +156,29 @@ def _check_zip(zip_path: Path, m: dict, product: str) -> None:
         raise PackError("zip 内 manifest 不应携带 sha256（zip 无法包含自身哈希）")
 
 
+def _gate_ui_document(pdir: Path, entry: str) -> None:
+    """打包闸门：ui 文档先过同源规则表（scripts/verify_ui_doc.py），不过即拒出包。
+
+    此前该口径只在装机期（宿主 BrickInstallGate → UIDocumentValidator）生效，
+    带病内容能出包、装机才炸 4303；本闸门把失败前移（契约 §7.5 / §2.4 布尔位）。
+    """
+    if not entry:
+        raise PackError("v2 manifest 缺 ui.entry（契约 §3.3）")
+    src = pdir / entry
+    if not src.is_file():
+        raise PackError(f"ui.entry 在仓库内不存在：{src}")
+    try:
+        document = json.loads(src.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        raise PackError(f"ui.entry 解析失败（{entry}）：{exc}") from exc
+    issues = verify_ui_doc.Issues()
+    verify_ui_doc.verify_document(document, issues)
+    if issues:
+        detail = "\n".join("  - " + item for item in issues.items)
+        raise PackError(f"ui.entry 未过规则表校验（{entry}）：\n{detail}")
+    print(f"[gate] ui 文档通过规则表校验：{entry}")
+
+
 def pack(product: str, version: str, out: Path | None = None) -> None:
     """v2 声明式产品出包：zip 根 = manifest.json + ui/ + logic/（无 `.app` bundle）。
 
@@ -177,6 +203,8 @@ def pack(product: str, version: str, out: Path | None = None) -> None:
     if out is None:
         _, out, _ = _release_paths(product, version)
     out.parent.mkdir(parents=True, exist_ok=True)
+
+    _gate_ui_document(pdir, ui.get("entry"))
 
     skip_dirs = {"__pycache__", ".git"}
     skip_files = {".DS_Store"}

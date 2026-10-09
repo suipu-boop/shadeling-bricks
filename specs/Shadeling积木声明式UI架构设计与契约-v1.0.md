@@ -245,6 +245,17 @@ AIGC:
 - 格式化器（可选）：`{{state.created_at | date}}`、`{{state.size | bytes}}`、`{{state.ratio | percent}}`、`{{state.count | number}}`。
 - **禁止**：算术运算、字符串拼接、函数调用、条件表达式、索引计算、访问 `state` 以外的作用域。
 
+### 布尔位（busy / disabled / visible / danger / required / mono）
+
+- **定义**：`button.busy`、`button.disabled`、`overlay.visible`、`overlay.danger`、`form.fields[].required`、`form.fields[].disabled`、`form.fields[].mono`（仅 `textarea`）为**布尔位**——渲染取值与校验口径同源（Swift `Interpolation.boolSlot` ↔ `verify_ui_doc.py::_check_bool_slot`）。
+- **合法取值**（仅三种，其余一律 `4303`）：
+  1. 布尔字面量：`true` / `false`；
+  2. 受限布尔插值：`{{state.<path>}}`（严格单表达式，**不接格式化器**、不允许字面量拼接）；
+  3. 旧式裸路径：`state.<path>`（**仅 legacy 兼容**，新内容一律写形态 2）。
+- **求值**：按 `truthy` 口径——`bool` 取自身；数值非 0；字符串/数组/对象非空；`null` 与缺失为假。
+- **与 `if` 的关系**：`if` 同属受限布尔插值（§2.3 通用字段），两者共用同一语法与求值口径；`if` 为假时节点不渲染，布尔位为假时控件呈禁用/占位态。
+- **失败前置**：装机期校验由宿主 `BrickInstallGate → UIDocumentValidator.boolProp` 执行（`4303`）；**打包期**由 `scripts/pack_product.py::_gate_ui_document` 先跑同源规则表（`verify_ui_doc.py`），带病内容**拒出包**，不再留到装机才炸。
+
 ### 事件上行
 
 | 事件名 | 触发时机 | payload |
@@ -276,7 +287,7 @@ AIGC:
 
 | 项 | 内容 |
 |---|---|
-| 关键 props | `value`(插值)、`style`(title/heading/body/caption/label)、`color`(令牌)、`lines`(最大行数)、`truncate`(tail/middle)、`mono`(bool)、`badge` |
+| 关键 props | `value`(插值)、`style`(title/heading/body/caption/label)、`color`(令牌)、`lines`(最大行数)、`truncate`(**枚举** `tail`/`middle`，布尔为 legacy 兼容)、`mono`(布尔位，§2.4)、`badge` |
 | 事件 | 无 |
 | 支持 | 单/多行文本、截断、等宽数字与代码片段、行内徽标 |
 | **不支持** | Markdown / HTML 富文本渲染、内联图片、自定义字体、文本内链接跳转、文本选择复制（列表与详情页的复制请用 `button` + `ui.clipboard.write`） |
@@ -285,7 +296,7 @@ AIGC:
 
 | 项 | 内容 |
 |---|---|
-| 关键 props | `label`、`style`(primary/secondary/ghost/danger)、`icon`(内置图标名)、`busy`(bool)、`disabled`(bool)、`size`(sm/md) |
+| 关键 props | `label`、`style`(primary/secondary/ghost/danger)、`icon`(内置图标名)、`busy`(布尔位，§2.4)、`disabled`(布尔位，§2.4)、`size`(sm/md) |
 | 事件 | `tap` |
 | 支持 | 图标 + 文字、忙碌态（由 state 驱动）、禁用态、危险动作语义色 |
 | **不支持** | 自定义尺寸与图标位置微调、长按手势、右键菜单、拖拽、按钮内自定义视图组合 |
@@ -313,7 +324,7 @@ AIGC:
 | 项 | 内容 |
 |---|---|
 | 子类型 | `field`(单行输入)、`textarea`(多行)、`picker`(下拉/分段/日期，`mode=menu/segment/date`)、`toggle`、`checkbox`、`secret`(掩码输入) |
-| 关键 props | `field_id`、`label`、`placeholder`、`value`(插值)、`options`、`error`(错误文案)、`required`、`disabled`；`mono`(bool，仅 `textarea`，等宽输入，E1 前置 T4) |
+| 关键 props | `field_id`、`label`、`placeholder`、`value`(插值)、`options`、`error`(错误文案)、`required`(布尔位，§2.4)、`disabled`(布尔位，§2.4)；`mono`(布尔位，仅 `textarea`，等宽输入，E1 前置 T4) |
 | 事件 | `change`、`submit`；`textarea` 逐次输入即上抛 `change`（E1 前置 T5） |
 | 支持 | 常见表单、字段级错误提示（文案由逻辑进程返回）、必填标记、日期选择（`picker mode=date`） |
 | **不支持** | 富文本编辑、Markdown 实时预览、自动完成/联想下拉、多文件上传控件、字段联动计算（联动由逻辑进程重渲染实现）、输入掩码与正则即时校验 |
@@ -344,6 +355,8 @@ AIGC:
 | `toast` | 轻提示 | `text`、`duration_ms` |
 
 **子类载体（E1 收口，2026-10-08）**：子类型一律写在 `props.kind`（上表四个取值），节点**顶层** `subtype` 键已废弃——`verify_ui_doc.py` 将顶层 `subtype` 判为错误（唯一载体口径），`verify_products.py` 亦只认 `props.kind`；存量冗余已清理（`products/vault/ui/main.json` 6 处）。
+
+**`visible` 口径（2026-10-09 补）**：`visible` 为**布尔位**（可省略；省略时按子类型默认——`sheet`/`dialog` 由逻辑进程 `state` 驱动显隐，`banner`/`toast` 默认随帧呈现）。合法取值仅布尔字面量、受限布尔插值 `{{state.<path>}}`、旧式裸路径 `state.<path>`（legacy），细则见 §2.4「布尔位」；`danger` 同为布尔位。
 
 | 项 | 内容 |
 |---|---|

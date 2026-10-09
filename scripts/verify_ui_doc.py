@@ -41,6 +41,11 @@ ACTION_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]{0,63}$")
 ICON_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 TEMPLATE_PATTERN = re.compile(r"\{\{(.*?)\}\}", re.S)
 TEMPLATE_BODY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]*(\s*\|\s*(date|bytes|percent|number))?$")
+# 布尔位（busy / disabled / visible / danger / required / mono）取值形态（对齐 Swift Interpolation.boolSlotPath）
+# 合法：布尔字面量 | 受限布尔插值 `{{state.<路径>}}`（严格单表达式、无格式化器、无字面量拼接） | 旧式裸路径 `state.<路径>`（legacy 兼容）
+STATE_PATH = r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*"
+BOOL_SLOT_INTERP_PATTERN = re.compile(r"^\{\{\s*state\." + STATE_PATH + r"\s*\}\}$")
+BOOL_SLOT_LEGACY_PATTERN = re.compile(r"^state\." + STATE_PATH + r"$")
 
 NODE_TYPES = (
     "container", "text", "button", "progress", "list", "card", "form", "overlay", "image", "icon", "grid",
@@ -90,6 +95,7 @@ ENUMS = {
     "picker_mode": ("menu", "segment", "date"),
     "overlay_kind": ("sheet", "dialog", "banner", "toast"),
     "overlay_level": ("info", "success", "warning", "error"),
+    "text_truncate": ("tail", "middle"),
     "image_fit": ("fill", "fit"),
     "icon_size": ("sm", "md", "lg"),
 }
@@ -155,6 +161,30 @@ def _check_enum(value, name, path, issues):
         return
     if value not in ENUMS[name]:
         issues.add(path, "取值非法：`%s`（白名单：%s）" % (value, " / ".join(ENUMS[name])))
+
+
+def _check_bool_slot(value, path, issues):
+    """布尔位取值检查（契约 §2.4 / §9）：布尔字面量 / 受限布尔插值 / 旧式裸路径。"""
+    if value is None:
+        return
+    if isinstance(value, bool):
+        return
+    if isinstance(value, str):
+        text = value.strip()
+        if BOOL_SLOT_INTERP_PATTERN.match(text) or BOOL_SLOT_LEGACY_PATTERN.match(text):
+            return
+    issues.add(path, "必须是布尔值或受限布尔插值（如 `{{state.publish_busy}}`）：`%s`" % (value,))
+
+
+def _check_truncate(value, path, issues):
+    """text.truncate（契约 §2.5）：`tail` / `middle` 枚举；布尔字面量为 legacy 兼容形态。"""
+    if value is None:
+        return
+    if isinstance(value, bool):
+        return
+    if isinstance(value, str) and value in ENUMS["text_truncate"]:
+        return
+    issues.add(path, "必须是 %s（布尔为 legacy 兼容）：`%s`" % (" / ".join(ENUMS["text_truncate"]), value))
 
 
 def _check_spacing(value, path, issues):
@@ -301,6 +331,8 @@ def _check_props(type_name, props, path, issues):
         if lines is not None:
             if isinstance(lines, bool) or not isinstance(lines, int) or not 1 <= lines <= 20:
                 issues.add(path + ".lines", "必须是 1…20 的整数：%s" % lines)
+        _check_truncate(props.get("truncate"), path + ".truncate", issues)
+        _check_bool_slot(props.get("mono"), path + ".mono", issues)
 
     elif type_name == "button":
         if props.get("label") is None:
@@ -309,6 +341,8 @@ def _check_props(type_name, props, path, issues):
             _check_string(props.get("label"), path + ".label", issues)
         _check_enum(props.get("style"), "button_style", path + ".style", issues)
         _check_enum(props.get("size"), "button_size", path + ".size", issues)
+        _check_bool_slot(props.get("busy"), path + ".busy", issues)
+        _check_bool_slot(props.get("disabled"), path + ".disabled", issues)
         if props.get("icon") is not None:
             _check_icon(props.get("icon"), path + ".icon", issues)
 
@@ -396,8 +430,11 @@ def _check_props(type_name, props, path, issues):
                     if key in field:
                         if kind != "textarea":
                             issues.add(spot, "键 `%s` 仅 textarea 可用（当前 kind=%s）" % (key, kind))
-                        elif not isinstance(field.get(key), bool):
-                            issues.add(spot, "键 `%s` 必须为 bool" % key)
+                        else:
+                            _check_bool_slot(field.get(key), spot + "." + key, issues)
+                for key in ("required", "disabled"):
+                    if key in field:
+                        _check_bool_slot(field.get(key), spot + "." + key, issues)
                 if field.get("label") is not None:
                     _check_string(field.get("label"), spot + ".label", issues)
                 if field.get("value") is not None:
@@ -424,14 +461,8 @@ def _check_props(type_name, props, path, issues):
             if props.get(key) is not None:
                 _check_string(props.get(key), "%s.%s" % (path, key), issues)
         _check_enum(props.get("level"), "overlay_level", path + ".level", issues)
-        if props.get("danger") is not None and not isinstance(props.get("danger"), bool):
-            issues.add(path + ".danger", "必须是布尔值")
-        if props.get("visible") is not None:
-            value = props.get("visible")
-            if not isinstance(value, str) or not TEMPLATE_PATTERN.search(value):
-                issues.add(path + ".visible", "必须是插值字符串（如 `{{state.manual_open}}`）：`%s`" % value)
-            else:
-                _check_templates(value, path + ".visible", issues)
+        _check_bool_slot(props.get("danger"), path + ".danger", issues)
+        _check_bool_slot(props.get("visible"), path + ".visible", issues)
         for key in ("auto_dismiss_ms", "duration_ms", "width"):
             number = props.get(key)
             if number is not None:
