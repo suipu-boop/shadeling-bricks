@@ -527,8 +527,8 @@ AIGC:
 | 字段 | 类型 | 必填 | 默认 | 语义 | 校验规则 |
 |---|---|---|---|---|---|
 | `protocol` | string | 是 | — | 固定 `jsonrpc-stdio/1` | 枚举外 → 拒绝 |
-| `entry` | string | 是 | — | 逻辑进程可执行文件（包内相对） | 存在 + 可执行位校验；禁止路径逃逸 |
-| `runtime` | string | 否 | `executable` | `executable`（自带可执行）/ `python3`（底座内置解释器） | 枚举外 → 拒绝 |
+| `entry` | string | 是 | — | 逻辑进程入口（包内相对）：`executable` 为自带可执行文件，`python3` / `node` 为脚本文件 | 存在性 + 路径逃逸校验；**可执行位仅对 `runtime=executable` 要求**（B4.1 起，node/python3 入口允许 644） |
+| `runtime` | string | 否 | `executable` | `executable`（自带可执行）/ `python3`（底座内置解释器）/ `node`（底座定位 node 后以 `[node, entry]` 启动，B4.1 起） | 枚举外 → 拒绝 |
 | `args` | string[] | 否 | `[]` | 启动参数 | 单参数 ≤256 字符，禁止 shell 元字符 |
 | `env` | object | 否 | `{}` | 额外环境变量 | **显式正列举白名单**（`BrickInstallGate.allowedLogicEnvKeys`，首批为空集 → `logic.env` 必须为空对象）：未列举键**安装期拒装**、运行期不注入；`SHADELING_*` 仍为底座保留（manifest 不得声明，底座自身注入语义不变）；键名格式与值（路径分隔符 / 凭据样式串 / 非字符串）纵深校验保留；**放行具体键须先做「底座 ↔ 契约 §3.3」同步登记，禁止按前缀或通配放行** |
 | `sha256` | string | 条件必填 | — | `logic.entry` 的完整性凭据（哈希登记） | 64 位十六进制；安装期与包内 `logic.entry` 实际字节比对，不一致 → 拒装。与 `signature` **二者至少其一** |
@@ -825,7 +825,7 @@ Content-Length: <字节数>\r\n
 
 | 阶段 | 时序 |
 |---|---|
-| 启动 | 底座 spawn（cwd = 私有目录，env 注入 `SHADELING_BRICK_ID` / `SHADELING_SESSION_ID` / `SHADELING_LOG_LEVEL`）→ `initialize` → 应答 → `initialized` → 首帧 `ui/update` → 渲染 |
+| 启动 | 底座 spawn（cwd = 私有目录，env 注入 `SHADELING_BRICK_ID` / `SHADELING_SESSION_ID` / `SHADELING_LOG_LEVEL`；`runtime=python3` / `node` 时另按运行时注入 `SHADELING_BRICK_SDK_DIR` 指向包内 `brick-sdk/<lang>`，B4.1 起）→ `initialize` → 应答 → `initialized` → 首帧 `ui/update` → 渲染 |
 | 交互 | 渲染器 `event/dispatch` → 逻辑进程更新 state → `ui/update` → 渲染器应用新帧 |
 | 能力调用 | 逻辑进程 `capability/call` → 闸门（声明/授予/配额三重校验）→ 既有 IPC handler → response → 逻辑进程更新 state → `ui/update` |
 | 槽位切换 | 切走：`lifecycle/suspend`（要求 1s 内应答）→ 停止刷新；切回：`lifecycle/resume` → 推送最新帧 |
