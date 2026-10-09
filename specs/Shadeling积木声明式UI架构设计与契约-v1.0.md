@@ -15,9 +15,9 @@ AIGC:
 
 
 
-# Shadeling 积木声明式 UI 架构设计与契约 v0.1
+# Shadeling 积木声明式 UI 架构设计与契约 v1.0
 
-> **状态**：方向已拍板（2026-09-26），契约待评审；实现变更须同步本文。
+> **状态**：方向已拍板（2026-09-26）；**v1.0（2026-10-09）**：Phase E 收口，随 legacy 独立 .app 路径删除升版——退役执行记录见 §6.4，Phase E 验收结论见 §7.6。实现变更须同步本文。
 > **适用范围**：Shadeling 底座（主区域宿主、渲染器、协议、闸门、安装器）、第三方积木包、积木市场。
 > **关联文档**：《积木规范化模板规格 v0.1》《积木市场 V2：独立积木包 + 真实下载安装》《brick-agent-bridge v0》《ipc-schema-v0》。
 > **本文性质**：契约文档。只定义"应当是什么"，不含实现排期细节（实施计划见第七章）。
@@ -1152,7 +1152,7 @@ Content-Length: <字节数>\r\n
 | 8 | `AppModel.openProductBrick` | 底座 | **改造**：v2 积木改为「spawn 逻辑进程 + 主区域挂载渲染器」；v1 积木在兼容期继续走 `NSWorkspace` 打开 `.app` | Phase A | 大 |
 | 9 | 桥 token 注入（`SHADELING_BRIDGE_ENDPOINT` / `SHADELING_BRIDGE_TOKEN`） | 底座 | **过渡保留**：仅 legacy 独立 .app 需要；v2 积木经 stdio + 闸门，不需要 token | Phase E 移除 | 中 |
 | 10 | `runningBricks` 登记表 | 底座 | **语义改造**：由「运行中 GUI 进程」改为「逻辑进程句柄 + 槽位状态」；单实例由槽位天然保证 | Phase A | 小 |
-| 11 | `createsNewApplicationInstance` 硬编码 | 底座 | **随 legacy 退役一并移除**：内嵌形态无多实例问题 | Phase E | 小 |
+| 11 | `createsNewApplicationInstance` 硬编码 | 底座 | **已执行（2026-10-09）**：legacy 产品拉起路径内的硬编码（`launchProductBrick` 中 `= false`）随路径整段删除；`main.swift` 的 `= true` 属 DMG 自换装（移入 /Applications 后拉起新副本）另有语义，**不在退役范围、保留** | Phase E | 小 |
 | 12 | brick-agent-bridge v0 闸门（`runtime/brick_bridge.py` + `ipc.py`） | 底座 | **保留**：作为能力调用统一落点；扩展 UI 侧权限枚举与审计 | Phase A~C | 小 |
 | 13 | 市场安装器 / `InstalledBrickManifest` | 底座 + 市场 | **演进**：支持 v2 schema、双入口校验、UI 文档离线预校验、级别化勾选 | Phase A~C | 中 |
 | 14 | `scripts/verify_products.py` | 仓库 | **扩展**：新增「UI 入口存在且可解析」「无裸弹层调用」「logic 入口哈希登记」三项 | Phase C | 小 |
@@ -1198,12 +1198,14 @@ Content-Length: <字节数>\r\n
 | 桥 token 注入（`ENDPOINT` / `TOKEN` 环境变量） | 同上 |
 | `createsNewApplicationInstance` 分支 | 同上 |
 
+> **三条件达成记录（2026-10-09）**：① 市场无 v1 在售——`index.json` products 段全部为 v2（`wechat-mp` 1.2.1 / `vault` 1.2.2）；② 无 v1 在跑——两个产品均已完成 v2 迁移（Phase D / Phase E1），本机是否残留 v1 实例由 owner 真机核验；③ 模板规格与市场文案已更新——《积木规范化模板规格 v0.1》§1.3 标注退役并回链本节，市场与设置页无「旧形态」文案。
+
 ### 退役步骤
 
 1. **标记期**（Phase D）：文档与市场标注「旧形态」；底座日志对 legacy 路径输出弃用警告；不再新增 v1 积木。
 2. **拒绝新装期**（Phase E 初）：市场下架 v1 积木，本地安装器对 v1 新装弹出「该积木为旧形态，功能将逐步下线」提示（不强制拒绝，避免破坏用户既有资产）。
-3. **代码删除期**（Phase E 末）：删除 `BrickScene.swift` / `BrickLifecycleView` / `openProductBrick` 的 legacy 分支 / 桥 token 注入；`verify_products.py` 移除 legacy 兼容检查。
-4. **文档回更**：模板规格窗口段标注「已退役（v0.2 起）」并回链本文；本文升版为 v1.0。
+3. **代码删除期**（Phase E 末）：删除 `BrickScene.swift` / `BrickLifecycleView` / `openProductBrick` 的 legacy 分支 / 桥 token 注入。**已完成（2026-10-09）**：`BrickUIKit/BrickScene.swift`（含 `BrickLifecycleView`）物理删除；底座删除 `openProductBrick` / `issueBridgeToken` / `launchProductBrick` / `trackRunningBrick` 与 `runningBricks` / `bridgeTokenObservers` 状态、`productDescriptor` 双分支收敛、`openBrick` 的 `.product` 分支、`BrickWorkshopView` 的 `.product` 枚举项与 `TokenObserverBox`；`main.swift` 的 `createsNewApplicationInstance = true` 属自换装逻辑保留（见 §6.1）。
+4. **文档回更**：模板规格窗口段标注「已退役（v0.2 起）」并回链本文；本文升版为 v1.0。**已完成（2026-10-09）**：本文升版 **v1.0**（文件更名 `Shadeling积木声明式UI架构设计与契约-v1.0.md`），模板 §1.3 已标注退役。
 
 ### 兼容期策略
 
@@ -1376,8 +1378,8 @@ Content-Length: <字节数>\r\n
 |---|---|---|
 | E1 wechat-mp 可表达部分迁移（草稿列表 / 发布表单 / 媒体管理 / 账户） | `ui/*.json` + `logic/wechat-mp` | Phase D |
 | E2 硬瓶颈替代方案落地（Markdown 编辑 / HTML 预览） | 决策结论 + 实现或延后说明 | E1 |
-| E3 legacy 路径退役（移除 `NSWorkspace` 打开 .app、桥 token 注入、`createsNewApplicationInstance`） | 代码删除 + 文档回更 | E1、E2 |
-| E4 本文升版 v1.0；模板规格窗口段标注退役 | 文档 | E3 |
+| E3 legacy 路径退役（移除 `NSWorkspace` 打开 .app、桥 token 注入、`createsNewApplicationInstance`） | 代码删除 + 文档回更（**2026-10-09 完成**，见 §6.4） | E1、E2 |
+| E4 本文升版 v1.0；模板规格窗口段标注退役 | 文档（**2026-10-09 完成**：本文升版 v1.0 + 模板 §1.3 标注退役） | E3 |
 
 **验收标准**
 
@@ -1386,6 +1388,8 @@ Content-Length: <字节数>\r\n
 3. 删除 legacy 路径后全量回归通过（含 v2 积木与内置积木）。
 4. 市场与设置页无「旧形态」残留文案；`verify_products.py` 无 legacy 兼容分支。
 5. 无 v1 积木在售、无 v1 积木在跑（可由市场与本地登记表核验）。
+
+> **验收状态（2026-10-09，Phase E 收口）**：①/② wechat-mp 迁移范围（草稿列表 / 发布表单 / 媒体管理 / 账户）由 `releases/1.2.1` 包 + `ui/main.json` + `logic/wechat_mp` 承载，真机目视待 owner；③ 删除 legacy 路径后全量回归通过（`swift build` / `swift test` / `verify_products.py` / `verify_ui_doc.py` 全绿，内置积木与 v2 积木路径未受影响）；④ 市场与设置页无「旧形态」文案，`verify_products.py` 无针对 legacy .app 形态的专用检查（§3.5 兼容期对 v1 包的放行由兼容期矩阵定义，非 legacy 专用分支）；⑤ `index.json` 在售清单已无 v1，本机无 v1 在跑由 owner 真机核验。
 
 ## 7.7 里程碑与量化指标
 

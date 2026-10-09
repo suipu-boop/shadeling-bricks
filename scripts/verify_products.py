@@ -33,7 +33,7 @@ products/<id>/ 发布前强制自检：
    待该源码下次改动时收敛；无 `source/` 或无 `Package.swift` 的形态按分流跳过。
 
 契约权威：specs/brick-market-v2.md（brick-app/v1 manifest）、
-specs/Shadeling积木声明式UI架构设计与契约-v0.1.md §2 / §3.6 / §7.4
+specs/Shadeling积木声明式UI架构设计与契约-v1.0.md §2 / §3.6 / §7.4
 用法：
     python3 scripts/verify_products.py             # 校验全部
     python3 scripts/verify_products.py <name>      # 只校验指定积木
@@ -381,15 +381,16 @@ def verify_version_consistency(pdir: Path, m: dict, zip_path: Path) -> list:
     覆盖两处：仓库源码 `source/Info.plist`（出包输入）与发布 zip 内入口 bundle 的
     `Contents/Info.plist`（用户实际装到的版本）。历史坑：wechat-mp 的 Info.plist 长期停在
     1.0.0 而 manifest 已到 1.1.0，安装后系统「关于」版本与市场登记版本对不上。
-    口径：只校验 v1（声明了 `bundle` 的 app 形态）产品——v2 声明式积木不发布 .app，
-    `source/Info.plist` 不在发布物内（如 vault 的遗留打包脚本残件），不参与核对、不误报。
-    不存在的 plist 跳过；存在但取不到版本号即报错。
+    口径（2026-10-09 扩展）：① v1（声明了 `bundle` 的 app 形态）：`source/Info.plist` 即出包输入，
+    与 zip 内入口 bundle 一并核对；② v2（声明式）但仓库仍留 `source/Info.plist` 的「源码形态」：
+    plist 虽不在发布物内，但版本号长期脱钩会误导排查（历史坑见上），故一并核对。
+    不存在 plist 的产品（纯声明式）直接跳过；存在但取不到版本号即报错。
     """
     errs = []
     ver = m.get("version") or ""
 
     src = pdir / "source" / "Info.plist"
-    if m.get("bundle") and src.exists():
+    if src.exists() and (m.get("bundle") or m.get("schema") == SCHEMA_V2):
         try:
             got = _plist_short_version(src.read_bytes())
         except VerifyError as e:

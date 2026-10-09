@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """UI 文档离线校验器（Phase D2）——与 Swift ``UIDocumentValidator`` 共用一套规则表。
 
-契约依据：``specs/Shadeling积木声明式UI架构设计与契约-v0.1.md`` §2.3（布局原语）/
+契约依据：``specs/Shadeling积木声明式UI架构设计与契约-v1.0.md`` §2.3（布局原语）/
 §2.4（文档结构）/§4.1~§4.10（组件规格）/§7.5（Phase D 验收）。
 
 规则表来源（逐条对齐，禁止擅自放宽）：
