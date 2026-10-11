@@ -118,12 +118,26 @@ V2 index.json：
 
 效果：底座系统工具（含老 24 条声明式条目）**不再出现在市场**，不再有任何"已安装/内置"标签；当前市场为空（V2 目录未上架任何产品积木）。
 
-### 5.2 待实施（V2 安装器）
+### 5.2 已落地（V2 安装器）
+
+> **状态回更（2026-10-11）**：本节原标「待实施（V2 安装器）」；实测 app 端主体已于 2026-09-05 起落地，并经 Phase C（安装闸门 / 权限 / 配额）与 Phase D、C4（安装期校验扩展）加固。回更依据为 Shadeling 仓 `app/Sources/ShadelingApp/` 现状（`AppModel.installBrick/uninstallBrick`、`BrickWorkshopView.swift` 内 `BrickPaths`、`BrickInstallGate.swift`）。滞留原因：文档未随实现同步（体检结论见 Shadeling `docs/repo-consistency-audit-2026-09-07.md` §4 第 3 项）。原三条待实施项保留如下，逐条已落地。
 
 - `BrickPaths`：新增安装根目录 `Bricks/<id>/<version>/`、manifest 读取、sha256 校验；
 - `installBrick` 重写：product zip 下载 → 校验 → 解压 → 登记 → 打开（替代现行"下载 brick.json 到本地 brick-vault"逻辑）；
 - `uninstallBrick`：删除包与登记（现行仅移除登记）；
 - 已装卡片墙：过渡期保留 vault / ppt-studio / cabinet 内置墙；待现有四只产品化决策后按 §7 迁移。
+
+**落地落点（2026-10-11 实测 Shadeling `app/Sources/ShadelingApp/`）**：
+
+- `BrickPaths`（`BrickWorkshopView.swift`）：安装根目录 `Bricks/<id>/<version>/` 已落地（`brickInstallRoot` / `installedProductRoot` / `installedProductDir`）；manifest 原文件与 `manifest.snapshot.json` 快照分别读写；已装判定 `isProductInstalled` 以「清单可解析 + 入口在盘上」为准（v2 判 `ui.entry` + `logic.entry` 双入口），**目录存在不算已装**。
+- `installBrick`（`AppModel.swift`）：已重写为「本地源优先（本机 brick-vault 同版本 zip 且 sha256 一致）→ 远端下载 → sha256 不匹配不落盘 → `ditto -x -k` 解压到 `Bricks/<id>/<version>/` → 安装闸门 `BrickInstallGate`（v2 强制 `nav`/`ui`/`logic` 三段、字段规则、`brick_id` 唯一性 + version 单调、UI 文档离线预校验、未知 schema 拒装；权限项未知名拒绝安装、不静默降权）→ 登记」，不再有「下载 brick.json 到本地 brick-vault」旧逻辑；并含残留/半成品目录清理、临时包不留存、C4 quota 钳制警告留档。
+- `uninstallBrick`（`AppModel.swift`）：已由「仅移除登记」升级为「停声明式逻辑进程 → 清主区域槽位 → 删除 `Bricks/<id>/` 全部版本与 manifest 快照 → 清登记与积木工具栏」。
+- 市场准入：按 `kind == "product"` 过滤（§5.1），底座系统能力不出现。
+
+**剩余差异（不改变本节结论，随 M4 收尾复核）**：
+
+- manifest `actions` / `data_store` / `scheme` 段的安装期扩展校验，口径见 §3.6 安装器校验清单，M4 验收时逐项复核。
+- 原第 4 条「待现有四只产品化决策后按 §7 迁移」：vault 已于 Phase D 完成 v2 迁移并上架（`index.json` 在售 vault 1.2.2），§7 待确认事项第 1/2 条仍待 owner 拍板，届时本节顺带回更。
 
 ## 六、底座系统工具绑定清单（不进市场）
 
