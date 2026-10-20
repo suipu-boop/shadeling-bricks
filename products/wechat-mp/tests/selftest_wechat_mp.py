@@ -338,6 +338,16 @@ def p4():
         check("P4.1 「%s」页互斥生效" % page, state[key] and not others, "异常互斥：%s" % others)
     eq("P4.2 page_label 跟随 page", state["page_label"], "发布")
     state = fresh()
+    # 真机链路复刻（2026-10-11 修复）：渲染器 form change 事件 payload 真实结构是
+    # {field: "page", value: "<页>"}（NodeRenderer.formView / pickerControl 上抛），
+    # 而非测试早先假设的 ui_state={"page": ...}。缺 {field,value} 吸收导致真机点导航不切页。
+    mod.act_page_change(state, ev("nav_form", "change", payload={"field": "page", "value": "素材"}))
+    sync(state)
+    eq("P4.1b 渲染器 {field,value} 载荷切到素材页", state["page"], "素材")
+    check("P4.1c 页面互斥（素材页激活、其余关闭）",
+          state["is_media"] and not (state["is_account"] or state["is_composer"]
+                                     or state["is_drafts"] or state["is_publish"]))
+    state = fresh()
     sync(state)
     check("P4.3 空凭据 → account_incomplete", state["account_incomplete"] and not state["account_complete"])
     state["app_id"], state["secret"] = "wx1", "sec"

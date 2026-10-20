@@ -993,6 +993,21 @@ def _absorb(envelope, state):
             for nested in ("values", "fields", "form", "form_values"):
                 if isinstance(src.get(nested), dict):
                     sources.append(src[nested])
+    # 渲染器 form 组件的字段事件结构：payload = {"field": fieldID, "value": newValue}
+    # （节点级权限 NodeRenderer.formView / pickerControl 的 change/submit 上抛）。
+    # 与上面「平铺字段键」并列吸收，缺此段页面切换 / 字段修改在真机失效（2026-10-11 修复）。
+    for src in (payload, ui_state):
+        if not isinstance(src, dict):
+            continue
+        raw_field = src.get("field") or src.get("field_id")
+        has_value = "value" in src
+        if isinstance(raw_field, str) and raw_field and has_value:
+            key = FIELD_TO_STATE.get(raw_field, raw_field)
+            value = _coerce(raw_field, src["value"])
+            if value is not None:
+                state[key] = value
+                hits.add(key)
+                continue
     for src in sources:
         for raw_key in FORM_FIELD_KEYS:
             if raw_key not in src:
