@@ -10,7 +10,7 @@
   "nav": {
     "view_id": "vault",
     "title": "本地资产中枢",
-    "icon": "lock.shield",
+    "icon": "folder",
     "order": 100
   },
   "ui": {
@@ -38,6 +38,6 @@
     "rss_mb": 512
   },
   "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/vault/releases/1.2.2/vault-1.2.2.zip",
-  "sha256": "72474793cd92d0fb4210597243140cd0e5dcdac212cb0cc81a8abd182ced63de",
+  "sha256": "6692b8c919dfd2cc4fc35e001e4e6e5659f6c8035393a8e6be35ce020656a302",
   "release_notes": "D4：库落盘改走宿主注入的私有数据目录（bricks/<brick_id>/data，安装目录之外），卸载重装不丢；首次启动逐字节 sha256 接管旧全局库（源库保留，失败回退不丢数据）。自测扩至 69 项（新增 P10 私有目录接管 8 项）。"
 }
