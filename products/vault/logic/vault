@@ -9,7 +9,7 @@
 覆盖的业务动作（与 Swift 侧逐项对齐）：
   - 命令栏：关键词检索（search change/submit）、手动新增入口、刷新；
   - 筛选栏：全部 / 证件 / 图片 / 收藏 / 技能 / 笔记 / AI 沉淀（source == "ai"）；
-  - 卡片墙：自适应栅格（min_column_width 190 / max 260 / gap 14）+ 卡片副标题与 AI/锁角标；
+  - 卡片墙：自适应栅格（min_column_width 190 / max 260 / gap 16=space.lg）+ 卡片副标题与 AI/锁角标；
   - 详情：字段卡片、编号掩码、敏感字段「Touch ID / 密码验证后查看」解锁、AI 摘要、删除两步确认；
   - 手动新增：按录入模板动态表单（证件 / 账号 / 收藏 / 笔记），敏感字段加密入库；
   - OCR 录入：``fs.pick`` 选图 → ``ocr.recognize`` 识别 → 解析证件字段 → 落库（敏感字段加密）。
@@ -115,7 +115,7 @@ CARD_PREFIX = "card_"
 LIST_LIMIT = 200          # 单帧卡片上限（quota.max_nodes=2000 的护栏）
 GRID_MIN_W = 190          # 与 Swift LazyVGrid(.adaptive(minimum: 190, maximum: 260)) 对齐
 GRID_MAX_W = 260
-GRID_GAP = 14
+GRID_GAP = 16          # 对齐设计档位 space.lg(16)，禁止两档间魔数（风控：满足值须落设计档）
 GRID_PADDING = 16
 GRID_MAX_COLUMNS = 6
 MIN_VIEWPORT_WIDTH = 640  # §7.5 验收 5：主区域 640pt 最小宽度下可用
@@ -1005,7 +1005,7 @@ def _fallback_root(state):
     return {
         "type": "container",
         "id": "root",
-        "props": {"direction": "vertical", "gap": 14, "padding": PADDING},
+        "props": {"direction": "vertical", "gap": GRID_GAP, "padding": PADDING},
         "children": [
             _text("app_title", "Vault", "title"),
             _text("load_error", "包内 UI 声明不可用：%s" % (UI_LOAD_NOTE or "未知原因"), "caption", 3),

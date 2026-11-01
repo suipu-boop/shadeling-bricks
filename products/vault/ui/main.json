@@ -49,7 +49,7 @@
     "id": "root",
     "props": {
       "direction": "vertical",
-      "gap": 14,
+      "gap": 16,
       "padding": 16
     },
     "children": [
@@ -223,7 +223,7 @@
         "props": {
           "columns": 3,
           "min_column_width": 190,
-          "gap": 14
+          "gap": 16
         },
         "children": []
       },
@@ -285,7 +285,7 @@
             "id": "manual_panel",
             "props": {
               "direction": "vertical",
-              "gap": 10
+              "gap": 12
             },
             "children": [
               {
@@ -386,7 +386,7 @@
             "id": "ocr_panel",
             "props": {
               "direction": "vertical",
-              "gap": 10
+              "gap": 12
             },
             "children": [
               {
@@ -432,7 +432,7 @@
                 "id": "ocr_parsed_box",
                 "props": {
                   "direction": "vertical",
-                  "gap": 6,
+                  "gap": 8,
                   "card_style": "card"
                 },
                 "if": "state.ocr_has_parsed",
@@ -458,7 +458,7 @@
                         "id": "ocr_row",
                         "props": {
                           "direction": "horizontal",
-                          "gap": 6
+                          "gap": 8
                         },
                         "children": [
                           {
@@ -550,7 +550,7 @@
             "id": "detail_panel",
             "props": {
               "direction": "vertical",
-              "gap": 10
+              "gap": 12
             },
             "children": [
               {
@@ -575,7 +575,7 @@
                 "id": "detail_basic_box",
                 "props": {
                   "direction": "vertical",
-                  "gap": 6,
+                  "gap": 8,
                   "card_style": "card"
                 },
                 "if": "state.detail_has_rows",
@@ -601,7 +601,7 @@
                         "id": "detail_row",
                         "props": {
                           "direction": "horizontal",
-                          "gap": 6
+                          "gap": 8
                         },
                         "children": [
                           {
@@ -632,7 +632,7 @@
                 "id": "detail_locked_box",
                 "props": {
                   "direction": "vertical",
-                  "gap": 6,
+                  "gap": 8,
                   "card_style": "card"
                 },
                 "if": "state.detail_has_sensitive",
@@ -702,7 +702,7 @@
                 "id": "detail_ai_box",
                 "props": {
                   "direction": "vertical",
-                  "gap": 6,
+                  "gap": 8,
                   "card_style": "card"
                 },
                 "if": "state.detail_has_ai",

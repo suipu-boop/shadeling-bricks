@@ -124,7 +124,13 @@
                   "kind": "picker",
                   "mode": "segment",
                   "label": "页面",
-                  "options": ["账号", "编辑", "素材", "草稿", "发布"],
+                  "options": [
+                    "账号",
+                    "编辑",
+                    "素材",
+                    "草稿",
+                    "发布"
+                  ],
                   "value": "{{state.page}}"
                 }
               ]
@@ -138,7 +144,7 @@
             "id": "nav_icons",
             "props": {
               "direction": "horizontal",
-              "gap": 10,
+              "gap": 12,
               "align": "center"
             },
             "children": [
@@ -196,8 +202,8 @@
         "id": "notice_bar",
         "props": {
           "direction": "horizontal",
-          "gap": 10,
-          "padding": 10,
+          "gap": 12,
+          "padding": 12,
           "align": "center",
           "card_style": "card"
         },
@@ -261,8 +267,8 @@
             "id": "account_cred_card",
             "props": {
               "direction": "vertical",
-              "gap": 10,
-              "padding": 14,
+              "gap": 12,
+              "padding": 16,
               "card_style": "card"
             },
             "children": [
@@ -306,7 +312,7 @@
                 "id": "account_actions",
                 "props": {
                   "direction": "horizontal",
-                  "gap": 10
+                  "gap": 12
                 },
                 "children": [
                   {
@@ -350,8 +356,8 @@
             "id": "account_store_card",
             "props": {
               "direction": "vertical",
-              "gap": 10,
-              "padding": 14,
+              "gap": 12,
+              "padding": 16,
               "card_style": "card"
             },
             "children": [
@@ -419,8 +425,8 @@
             "id": "account_tips_card",
             "props": {
               "direction": "vertical",
-              "gap": 6,
-              "padding": 14,
+              "gap": 8,
+              "padding": 16,
               "card_style": "card"
             },
             "children": [
@@ -509,7 +515,10 @@
                       "kind": "picker",
                       "mode": "menu",
                       "label": "排版主题",
-                      "options": ["松绿", "素墨"],
+                      "options": [
+                        "松绿",
+                        "素墨"
+                      ],
                       "value": "{{state.theme}}"
                     }
                   ]
@@ -672,8 +681,8 @@
             "id": "composer_meta_card",
             "props": {
               "direction": "vertical",
-              "gap": 10,
-              "padding": 14,
+              "gap": 12,
+              "padding": 16,
               "card_style": "card"
             },
             "children": [
@@ -716,7 +725,9 @@
                       "kind": "picker",
                       "mode": "menu",
                       "label": "封面素材",
-                      "options": ["未选择（必填）"],
+                      "options": [
+                        "未选择（必填）"
+                      ],
                       "value": "{{state.cover_value}}"
                     },
                     {
@@ -958,8 +969,8 @@
             "id": "publish_permission_card",
             "props": {
               "direction": "vertical",
-              "gap": 10,
-              "padding": 14,
+              "gap": 12,
+              "padding": 16,
               "card_style": "card"
             },
             "children": [
@@ -976,7 +987,7 @@
                 "id": "publish_permission_states",
                 "props": {
                   "direction": "horizontal",
-                  "gap": 10,
+                  "gap": 12,
                   "align": "center"
                 },
                 "children": [
@@ -1079,8 +1090,8 @@
             "id": "publish_submit_card",
             "props": {
               "direction": "vertical",
-              "gap": 10,
-              "padding": 14,
+              "gap": 12,
+              "padding": 16,
               "card_style": "card"
             },
             "if": "state.publish_granted",
@@ -1103,7 +1114,9 @@
                       "kind": "picker",
                       "mode": "menu",
                       "label": "目标草稿",
-                      "options": ["未选择"],
+                      "options": [
+                        "未选择"
+                      ],
                       "value": "{{state.publish_target}}"
                     },
                     {
@@ -1125,7 +1138,7 @@
                 "id": "publish_actions",
                 "props": {
                   "direction": "horizontal",
-                  "gap": 10
+                  "gap": 12
                 },
                 "children": [
                   {
@@ -1195,8 +1208,8 @@
             "id": "publish_explain_card",
             "props": {
               "direction": "vertical",
-              "gap": 6,
-              "padding": 14,
+              "gap": 8,
+              "padding": 16,
               "card_style": "card"
             },
             "children": [

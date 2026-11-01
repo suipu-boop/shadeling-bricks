@@ -219,14 +219,22 @@ def _check_token(value, kind, path, issues):
                % (kind, value, " / ".join(allowed)))
 
 
+# 设计档位间距（pt）。与 TokenMap.swift spacing 令牌（space.xs/sm/md/lg/xl = 4/8/12/16/24）对齐。
+# 契约 §2.3：间距**数字字面量**也必须落在设计档内，禁止 14/15 这类「两档之间」的自造魔数；
+# 否则各积木各自挑尺寸 → 视觉排布不统一。表外数字直接拒（不静默靠近档位）。
+SPACING_STEPS = (4, 8, 12, 16, 24)
+
+
 def _check_spacing(value, path, issues):
     if value is None:
         return
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         _check_token(value, "spacing", path, issues)
         return
-    if not 0 <= value <= 64:
-        issues.add(path, "超出范围 0…64：%s" % value)
+    # 数字字面量：必须落在 design 档位（与 space.* token 同值），禁止两档间魔数。
+    if value not in SPACING_STEPS:
+        issues.add(path, "间距须落在设计档位 %s（space.xs/sm/md/lg/xl）；禁止两档间魔数：%s"
+                   % ("/".join(str(s) for s in SPACING_STEPS), value))
 
 
 def _check_icon(name, path, issues):

@@ -42,21 +42,21 @@
       "path": "bricks/ppt-studio/"
     }
   ],
-  "updated_at": "2026-11-01T19:50:06",
+  "updated_at": "2026-11-01T20:45:28",
   "products": [
     {
       "name": "wechat-mp",
       "version": "1.2.1",
       "kind": "product",
       "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/wechat-mp/releases/1.2.1/wechat-mp-1.2.1.zip",
-      "sha256": "2a868782bf7da2ae4cbe6f7882c72ee4593a05faef1352579cd3362c7b180e06"
+      "sha256": "936aa085f486a6cc91f8b104d6696a876a8eb00e2e2f5fd65fefcc980e7e9ad1"
     },
     {
       "name": "vault",
       "version": "1.2.2",
       "kind": "product",
       "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/vault/releases/1.2.2/vault-1.2.2.zip",
-      "sha256": "6692b8c919dfd2cc4fc35e001e4e6e5659f6c8035393a8e6be35ce020656a302"
+      "sha256": "b830eaae0bc069775720b49da00b237f7bd4781b275559a4edbfe6dfe5dbfd0c"
     }
   ]
 }
