@@ -38,6 +38,6 @@
     "rss_mb": 512
   },
   "download_url": "https://github.com/suipu-boop/shadeling-bricks/raw/main/products/vault/releases/1.2.2/vault-1.2.2.zip",
-  "sha256": "f81752481495abc37b7afe18dc8139fd8ff6d2a4a41dce22291426b7b633b3a0",
+  "sha256": "54eedc7315b61b7bb3daa1c563f076cdc07cc5c37812558e2c79ffe6a58bc0d8",
   "release_notes": "D4：库落盘改走宿主注入的私有数据目录（bricks/<brick_id>/data，安装目录之外），卸载重装不丢；首次启动逐字节 sha256 接管旧全局库（源库保留，失败回退不丢数据）。自测扩至 69 项（新增 P10 私有目录接管 8 项）。"
 }

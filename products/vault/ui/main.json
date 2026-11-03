@@ -222,9 +222,8 @@
         "type": "grid",
         "id": "card_wall",
         "props": {
-          "columns": 3,
           "min_column_width": 190,
-          "gap": 16
+                        "gap": 16
         },
         "children": []
       },
