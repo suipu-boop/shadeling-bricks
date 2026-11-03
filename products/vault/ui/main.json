@@ -83,6 +83,7 @@
             "id": "search_box",
             "props": {
               "submit_label": "查找",
+              "layout": "inline",
               "fields": [
                 {
                   "field_id": "q",

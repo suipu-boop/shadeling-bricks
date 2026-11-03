@@ -62,7 +62,7 @@ PROPS = {
     "progress": {"style", "value", "label"},
     "list": {"items", "selection", "empty_state", "lazy"},
     "card": {"title", "subtitle", "meta", "tags", "badge", "icon", "thumbnail", "actions", "selectable"},
-    "form": {"fields", "submit_label"},
+    "form": {"fields", "submit_label", "layout"},
     "overlay": {"kind", "visible", "title", "message", "content", "primary_action", "secondary_action",
                 "confirm_label", "cancel_label", "danger", "text", "level", "auto_dismiss_ms",
                 "duration_ms", "width"},
